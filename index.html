@@ -1002,7 +1002,8 @@ const DB = {
   },
 
   // restoreBackup — used by JSON import feature.
-  // Writes to _cache and persists everything to Supabase.
+  // Writes to _cache and does a full delete-then-insert to Supabase —
+  // a true point-in-time snapshot restore, not a merge/upsert.
   restoreBackup(d) {
     if (d.students)     _cache.students    = d.students;
     if (d.sessions)     _cache.sessions    = d.sessions;
@@ -1014,8 +1015,8 @@ const DB = {
     if (d.classNames)   _cache.classNames  = d.classNames;
     if (d.settings)     _cache.settings    = d.settings;
     if (d.templates)    _cache.templates   = d.templates;
-    // Full Supabase persist — called after JSON restore only
-    SupabaseSync.save();
+    // Full Supabase snapshot restore — delete-then-insert, restore-only path
+    SupabaseSync.restoreAll();
   },
 
   importJSON(json) {
@@ -4894,6 +4895,29 @@ const SupabaseSync = {
     }
   },
 
+  // ── RESTORE-ONLY orchestrator: full delete-then-insert across all tables ──
+  // Used only by DB.restoreBackup() — never called from anywhere else.
+  // Mirrors save() exactly, but calls the restore-only delete-then-insert
+  // methods for students/sessions/teachers/templates instead of the shared
+  // upsert methods (which must stay untouched for everyday features).
+  async restoreAll() {
+    this.setStatus('syncing');
+    try {
+      await this.restoreStudents(_cache.students);
+      await this.restoreSessions(_cache.sessions);
+      await this.restoreTeachers(_cache.teachers);
+      await this.upsertSettings(_cache.settings);
+      await this.restoreTemplates(_cache.templates);
+      await this.upsertLookupConfig();
+      this.setStatus('synced');
+      console.log('SupabaseSync.restoreAll: full snapshot restore complete');
+    } catch(e) {
+      console.warn('SupabaseSync.restoreAll failed:', e.message);
+      this.setStatus('error');
+      if (typeof showToast === 'function') showToast('⚠️ Restore failed: ' + e.message, 'error');
+    }
+  },
+
   // ── teacherSave — no longer needed, kept as no-op ──
   teacherSave() {},
 
@@ -4922,6 +4946,18 @@ const SupabaseSync = {
     if (error) console.warn('deleteAllStudents:', error.message);
   },
 
+  // ── RESTORE-ONLY: full delete-then-insert, used only by restoreBackup() ──
+  // Not shared with upsertStudents — that one is used by everyday features
+  // (setAllActiveToAlumni etc.) and must never delete rows outside its array.
+  async restoreStudents(arr) {
+    const { error: delErr } = await _supabase.from('students').delete().neq('id', '');
+    if (delErr) { console.warn('restoreStudents delete:', delErr.message); this.setStatus('error'); return; }
+    if (!arr.length) return;
+    const { error } = await _supabase.from('students').insert(arr.map(s => this._toStudentRow(s)));
+    if (error) { console.warn('restoreStudents insert:', error.message); this.setStatus('error'); }
+    else this.setStatus('synced');
+  },
+
   async upsertSession(session) {
     const { error } = await _supabase.from('sessions').upsert([this._toSessionRow(session)], { onConflict: 'id' });
     if (error) console.warn('upsertSession:', error.message);
@@ -4936,6 +4972,16 @@ const SupabaseSync = {
   async deleteSession(name) {
     const { error } = await _supabase.from('sessions').delete().eq('id', name);
     if (error) console.warn('deleteSession:', error.message);
+  },
+
+  // ── RESTORE-ONLY: full delete-then-insert, used only by restoreBackup() ──
+  // Not shared with upsertSessions — that one is used by everyday session edits.
+  async restoreSessions(arr) {
+    const { error: delErr } = await _supabase.from('sessions').delete().neq('id', '');
+    if (delErr) { console.warn('restoreSessions delete:', delErr.message); return; }
+    if (!arr.length) return;
+    const { error } = await _supabase.from('sessions').insert(arr.map(s => this._toSessionRow(s)));
+    if (error) console.warn('restoreSessions insert:', error.message);
   },
 
   async deleteTemplate(id) {
@@ -4954,6 +5000,26 @@ const SupabaseSync = {
     }));
     const { error } = await _supabase.from('teachers').upsert(rows, { onConflict: 'email' });
     if (error) console.warn('upsertTeachers:', error.message);
+  },
+
+  // ── RESTORE-ONLY: full delete-then-insert, used only by restoreBackup() ──
+  // Not shared with upsertTeachers — that one is used by addTeacher/removeTeacher,
+  // which pass DB.getTeachers() (admins filtered out) — restoring with delete-all
+  // there would wipe every admin row. This function is only ever given the
+  // complete teachers array straight from a JSON backup, admins included.
+  async restoreTeachers(arr) {
+    const { error: delErr } = await _supabase.from('teachers').delete().neq('email', '');
+    if (delErr) { console.warn('restoreTeachers delete:', delErr.message); return; }
+    if (!arr.length) return;
+    const rows = arr.map(t => ({
+      first_name: t.firstName || '',
+      last_name:  t.lastName  || '',
+      email:      t.email     || '',
+      phone:      t.phone     || '',
+      role:       t.role      || 'teacher',
+    }));
+    const { error } = await _supabase.from('teachers').insert(rows);
+    if (error) console.warn('restoreTeachers insert:', error.message);
   },
 
   async upsertSettings(obj) {
@@ -4983,6 +5049,25 @@ const SupabaseSync = {
     }));
     const { error } = await _supabase.from('templates').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('upsertTemplates:', error.message);
+  },
+
+  // ── RESTORE-ONLY: full delete-then-insert, used only by restoreBackup() ──
+  // Not shared with upsertTemplates — that one is used by saveTemplate/deleteTemplate.
+  async restoreTemplates(arr) {
+    const { error: delErr } = await _supabase.from('templates').delete().neq('id', '');
+    if (delErr) { console.warn('restoreTemplates delete:', delErr.message); return; }
+    if (!arr.length) return;
+    const rows = arr.map(t => ({
+      id:         t.id,
+      name:       t.name      || '',
+      subject:    t.subject   || '',
+      body:       t.body      || '',
+      created_by: t.createdBy ?? null,
+      created_at: t.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await _supabase.from('templates').insert(rows);
+    if (error) console.warn('restoreTemplates insert:', error.message);
   },
 
   async upsertLookupConfig() {
