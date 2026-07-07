@@ -393,6 +393,7 @@ tbody tr { transition: background var(--transition); }
 /* ── EMAIL COMPOSE ─────────────────────────────────────────── */
 .placeholder-chip { display: inline-block; background: var(--orange-light); color: var(--orange-dark); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; margin: 2px; border: 1px solid rgba(242,125,38,0.3); }
 .placeholder-chip:hover { background: var(--orange); color: white; }
+[contenteditable][data-placeholder]:empty:before { content: attr(data-placeholder); color: var(--ink-light); pointer-events: none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -5153,12 +5154,7 @@ const GMAIL = {
     // Build RFC 2822 message, base64url-encode it
   buildRawMessage({ to, subject, body, fromName, fromEmail }) {
     const nl = '\r\n';
-    // Convert plain text body to basic HTML — preserves line breaks and allows hyperlinks
-    const htmlBody = body
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
+    // body is already HTML from the rich-text compose editor — used directly, not escaped
     const msg = [
       `From: ${fromName} <${fromEmail}>`,
       `To: ${to}`,
@@ -5166,7 +5162,7 @@ const GMAIL = {
       `Content-Type: text/html; charset=UTF-8`,
       `MIME-Version: 1.0`,
       ``,
-      `<html><body style="font-family:sans-serif;font-size:14px;line-height:1.6;">${htmlBody}</body></html>`,
+      `<html><body style="font-family:sans-serif;font-size:14px;line-height:1.6;">${body}</body></html>`,
     ].join(nl);
     return btoa(unescape(encodeURIComponent(msg)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -5283,7 +5279,29 @@ function renderEmail() {
         </div>
         <div class="form-group" style="margin-bottom:12px;">
           <label class="form-label">Message</label>
-          <textarea class="form-textarea" id="email-body" rows="7" placeholder="Dear {{parentFirstName}},\n\nWe are pleased to invite your child {{studentFirstName}} to enroll in {{sessionName}}…"></textarea>
+          <div style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; padding:8px; background:var(--cream-dark); border-radius:var(--radius-sm);">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('bold')" title="Bold"><strong>B</strong></button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('italic')" title="Italic"><em>I</em></button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('underline')" title="Underline" style="text-decoration:underline;">U</button>
+            <span style="width:1px; background:var(--olive-mid); margin:0 4px;"></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#000000')" title="Black" style="color:#000000;">A</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#c0392b')" title="Red" style="color:#c0392b;">A</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#1a6b3a')" title="Green" style="color:#1a6b3a;">A</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#1a4a8a')" title="Blue" style="color:#1a4a8a;">A</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#c07000')" title="Orange" style="color:#c07000;">A</button>
+            <span style="width:1px; background:var(--olive-mid); margin:0 4px;"></span>
+            <select class="form-select" style="font-size:12px; padding:3px 6px; height:auto; width:auto;" onchange="emailFormat('fontSize', this.value); this.value=''">
+              <option value="">Size</option>
+              <option value="1">Small</option>
+              <option value="3">Normal</option>
+              <option value="4">Large</option>
+              <option value="5">X-Large</option>
+            </select>
+          </div>
+          <div id="email-body" contenteditable="true"
+            data-placeholder="Dear {{parentFirstName}}, We are pleased to invite your child {{studentFirstName}} to enroll in {{sessionName}}…"
+            style="min-height:140px; padding:10px 12px; border:1px solid var(--olive-mid); border-radius:var(--radius-md); font-size:14px; line-height:1.6; color:var(--ink); background:white; outline:none; overflow-y:auto;">
+          </div>
         </div>
         ${isAdmin ? `
           <div style="display:flex; gap:8px; margin-bottom:12px;">
@@ -5419,17 +5437,21 @@ function toggleAllRecipients(checked) {
   updateRecipientCount();
 }
 
+function emailFormat(cmd, val) {
+  document.getElementById('email-body')?.focus();
+  document.execCommand(cmd, false, val || null);
+}
+
 function insertPlaceholder(ph) {
-  const ta = document.getElementById('email-body');
-  if (!ta) return;
-  const s = ta.selectionStart, e = ta.selectionEnd;
-  ta.value = ta.value.slice(0,s) + ph + ta.value.slice(e);
-  ta.focus(); ta.selectionStart = ta.selectionEnd = s + ph.length;
+  const body = document.getElementById('email-body');
+  if (!body) return;
+  body.focus();
+  document.execCommand('insertText', false, ph);
 }
 
 async function sendEmailGmail() {
   const subject = document.getElementById('email-subject').value.trim();
-  const body    = document.getElementById('email-body').value.trim();
+  const body    = document.getElementById('email-body').innerHTML.trim();
   const checked = [...document.querySelectorAll('.email-recipient-cb:checked')];
 
   if (!subject) { showToast('Please enter a subject', 'error'); return; }
@@ -5571,13 +5593,13 @@ function loadTemplate() {
   const subj = document.getElementById('email-subject');
   const body = document.getElementById('email-body');
   if (subj) subj.value = tmpl.subject || '';
-  if (body) body.value = tmpl.body || '';
+  if (body) body.innerHTML = tmpl.body || '';
   showToast(`Template "${tmpl.name}" loaded`, 'success');
 }
 
 function openSaveTemplateDialog() {
   const subject = document.getElementById('email-subject')?.value.trim();
-  const body    = document.getElementById('email-body')?.value.trim();
+  const body    = document.getElementById('email-body')?.innerHTML.trim();
   if (!subject && !body) { showToast('Nothing to save — write your email first', 'error'); return; }
 
   const html = `
@@ -5593,7 +5615,7 @@ function openSaveTemplateDialog() {
         </div>
         <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px; font-size:13px; color:var(--ink-mid);">
           <div style="font-weight:600; margin-bottom:4px;">Subject: ${escHtml(subject)}</div>
-          <div style="white-space:pre-wrap; font-size:12px; color:var(--ink-light); max-height:80px; overflow:hidden;">${escHtml(body.slice(0,200))}${body.length>200?'…':''}</div>
+          <div style="font-size:12px; color:var(--ink-light); max-height:80px; overflow:hidden;">${body}</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -5607,7 +5629,7 @@ function openSaveTemplateDialog() {
 function saveTemplate() {
   const name    = document.getElementById('tmpl-name')?.value.trim();
   const subject = document.getElementById('email-subject')?.value.trim() || '';
-  const body    = document.getElementById('email-body')?.value.trim() || '';
+  const body    = document.getElementById('email-body')?.innerHTML.trim() || '';
   if (!name) { showToast('Please enter a template name', 'error'); return; }
   const tmpl = {
     id:        'tmpl_' + Date.now(),
@@ -5681,7 +5703,7 @@ function loadTemplateById(id) {
   const subj = document.getElementById('email-subject');
   const body = document.getElementById('email-body');
   if (subj) subj.value = t.subject || '';
-  if (body) body.value = t.body || '';
+  if (body) body.innerHTML = t.body || '';
   showToast(`Template "${t.name}" loaded`, 'success');
 }
 
