@@ -1013,7 +1013,7 @@ const DB = {
     if (d.levelBookMap) _cache.levelBookMap= d.levelBookMap;
     if (d.classTimes)   _cache.classTimes  = d.classTimes;
     if (d.classNames)   _cache.classNames  = d.classNames;
-    if (d.settings)     _cache.settings    = d.settings;
+    if (d.settings)     _cache.settings    = { ..._cache.settings, ...d.settings };
     if (d.templates)    _cache.templates   = d.templates;
     // Full Supabase snapshot restore — delete-then-insert, restore-only path
     SupabaseSync.restoreAll();
