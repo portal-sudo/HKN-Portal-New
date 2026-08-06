@@ -696,6 +696,13 @@ const SessionEngine = {
       return today >= dates[0] && today <= dates[dates.length - 1];
     });
     if (underway) return underway;
+    // No session is literally happening today (e.g. summer break) — prefer
+    // whichever session is currently open for enrollment, since that's the
+    // operative "current" session for admin/teacher purposes even before
+    // its first class date arrives. Mirrors the same fix already applied
+    // to getActiveSession() for the top banner.
+    const openSess = sessions.find(s => s.enrollmentOpen);
+    if (openSess) return openSess;
     const started = sessions.filter(s => (s.classDates||[]).length && s.classDates[0] <= today);
     return started.length ? started[started.length - 1] : sessions[sessions.length - 1];
   },
@@ -3321,16 +3328,24 @@ function renderClasses() {
   const sessions  = DB.getSessions();
   const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
 
-  // Build the page shell with session selector
+  // Build the page shell with session, teacher, and class level selectors
   const html = `
     <div class="page-header">
       <div class="page-title">Classes</div>
       <div class="page-subtitle">Classes by teacher and time slot for each session</div>
     </div>
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
       <label class="form-label" style="margin:0; white-space:nowrap;">Session</label>
       <select class="form-select" id="classes-session-sel" onchange="renderClassCards()" style="max-width:200px;">
         ${sessions.map(s => `<option value="${escHtml(s.name)}" ${s.name === activeSess?.name ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+      </select>
+      <select class="form-select" id="classes-filter-teacher" onchange="renderClassCards()" style="max-width:200px;">
+        <option value="">All teachers</option>
+        ${DB.teacherNames().map(t => `<option value="${t}">${t}</option>`).join('')}
+      </select>
+      <select class="form-select" id="classes-filter-level" onchange="renderClassCards()" style="max-width:200px;">
+        <option value="">All levels</option>
+        ${DB.getClassLevels().map(l => `<option value="${l}">${l}</option>`).join('')}
       </select>
     </div>
     <div id="classes-card-area"></div>
@@ -3345,17 +3360,25 @@ function renderClassCards() {
   const area     = document.getElementById('classes-card-area');
   if (!area || !sessName) return;
 
-  // Gather all students in this session
+  const teacherFilter = document.getElementById('classes-filter-teacher')?.value || '';
+  const levelFilter    = document.getElementById('classes-filter-level')?.value || '';
+
+  // Gather all students in this session, applying teacher/level filters
   const allStudents = DB.getStudents();
-  const sessStudents = allStudents.filter(s =>
-    (s.sessionData || []).some(sd => sd.session === sessName)
-  );
+  const sessStudents = allStudents.filter(s => {
+    const sd = (s.sessionData || []).find(d => d.session === sessName);
+    if (!sd) return false;
+    if (teacherFilter && sd.teacher !== teacherFilter) return false;
+    if (levelFilter && sd.classLevel !== levelFilter) return false;
+    return true;
+  });
 
   // Group by teacher + classTime
   const classMap = {};
   sessStudents.forEach(s => {
     const sd = (s.sessionData || []).find(d => d.session === sessName);
     if (!sd) return;
+    if (!sd.teacher) return;  // skip students with no teacher assigned yet — not a real class
     const teacher   = sd.teacher   || '—';
     const classTime = sd.classTime || '—';
     const key = teacher + '|' + classTime;
