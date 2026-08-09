@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HKN Admin Help & Checklist</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --olive:       #3D5A3E;
+      --olive-mid:   #6B8F71;
+      --olive-pale:  #EFF5EF;
+      --olive-dark:  #2A3F2B;
+      --orange:      #E8824A;
+      --orange-light:#FDF0E8;
+      --ink:         #1A1A12;
+      --ink-mid:     #4A4A38;
+      --ink-light:   #6B6B52;
+      --cream:       #FAF6EF;
+      --cream-dark:  #F0E8D8;
+      --border:      #D4C9A8;
+      --success:     #2E7D32;
+      --warning:     #C07800;
+      --serif:       'Cormorant Garamond', serif;
+      --sans:        'Nunito', sans-serif;
+      --radius:      10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--cream);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--olive-dark);
+      padding: 32px 40px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-left h1 {
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 4px;
+    }
+    .header-left p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      font-style: italic;
+    }
+    .header-badge {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.75);
+      font-weight: 600;
+    }
+
+    /* ── TOC ── */
+    .toc {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .toc-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-light);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 4px;
+    }
+    .toc a {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--olive);
+      text-decoration: none;
+      background: var(--olive-pale);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 14px;
+      transition: all 0.2s;
+    }
+    .toc a:hover {
+      background: var(--olive);
+      color: white;
+      border-color: var(--olive);
+    }
+
+    /* ── Progress bar (checklist only) ── */
+    .progress-strip {
+      background: var(--olive-mid);
+      padding: 10px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .progress-bar-outer {
+      flex: 1;
+      height: 6px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      background: white;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+    .progress-label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .reset-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 11px;
+      font-family: var(--sans);
+      font-weight: 600;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .reset-btn:hover { background: rgba(255,255,255,0.25); }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    /* ── Section headings ── */
+    .section-heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 40px 0 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+      scroll-margin-top: 20px;
+    }
+    .section-heading .icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .section-heading h2 {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--olive-dark);
+    }
+    .section-heading p {
+      font-size: 12px;
+      color: var(--ink-light);
+      font-style: italic;
+      margin-top: 2px;
+    }
+
+    .icon-checklist { background: #F3E5D0; }
+    .icon-quickref  { background: var(--olive-pale); }
+    .icon-faq       { background: #E8F4FD; }
+
+    /* ── Checklist styles ── */
+    .phase {
+      margin-bottom: 20px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .phase-header {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .phase-icon { font-size: 18px; }
+    .phase-title {
+      font-family: var(--serif);
+      font-size: 17px;
+      font-weight: 700;
+      color: white;
+      flex: 1;
+    }
+    .phase-timing {
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+      font-style: italic;
+    }
+    .phase-count {
+      font-size: 11px;
+      color: rgba(255,255,255,0.8);
+      font-weight: 700;
+      background: rgba(0,0,0,0.15);
+      border-radius: 10px;
+      padding: 2px 10px;
+    }
+    .phase-end    .phase-header { background: #5C4033; }
+    .phase-open   .phase-header { background: var(--olive); }
+    .phase-enroll .phase-header { background: #8B6914; }
+    .phase-start  .phase-header { background: #2E5077; }
+
+    .cl-section { background: white; border-left: 4px solid transparent; }
+    .phase-end    .cl-section { border-left-color: #5C4033; }
+    .phase-open   .cl-section { border-left-color: var(--olive); }
+    .phase-enroll .cl-section { border-left-color: #8B6914; }
+    .phase-start  .cl-section { border-left-color: #2E5077; }
+
+    .cl-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-light);
+      padding: 10px 20px 4px;
+    }
+    .item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--cream-dark);
+      transition: background 0.15s;
+      cursor: pointer;
+    }
+    .item:last-child { border-bottom: none; }
+    .item:hover { background: var(--cream); }
+    .item.done { background: #F0FFF0; }
+    .item-num {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-light);
+      min-width: 20px;
+      margin-top: 2px;
+    }
+    .item-cb {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+      transition: all 0.2s;
+    }
+    .item.done .item-cb { background: var(--success); border-color: var(--success); }
+    .item.done .item-cb::after { content: '✓'; color: white; font-size: 11px; font-weight: 700; }
+    .item-text { font-size: 13px; color: var(--ink); line-height: 1.5; flex: 1; }
+    .item.done .item-text { color: var(--ink-light); text-decoration: line-through; }
+    .item-note { font-size: 11px; color: var(--ink-light); font-style: italic; display: block; margin-top: 2px; }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .tag-portal { background: var(--olive-pale); color: var(--olive); }
+    .tag-email  { background: #FFF3CD; color: #856404; }
+    .tag-data   { background: #E8F4FD; color: #1565C0; }
+
+    /* ── Quick Reference styles ── */
+    .qr-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 640px) { .qr-grid { grid-template-columns: 1fr; } }
+
+    .qr-card {
+      background: white;
+      border-radius: var(--radius);
+      border-left: 4px solid var(--olive-mid);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      overflow: hidden;
+    }
+    .qr-card-title {
+      background: var(--olive-pale);
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--olive-dark);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .qr-card-body {
+      padding: 12px 16px;
+    }
+    .qr-steps {
+      list-style: none;
+      counter-reset: step;
+    }
+    .qr-steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--ink-mid);
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+    .qr-steps li:last-child { margin-bottom: 0; }
+    .qr-steps li::before {
+      content: counter(step);
+      min-width: 20px;
+      height: 20px;
+      background: var(--olive-mid);
+      color: white;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .qr-note {
+      font-size: 11px;
+      color: var(--warning);
+      font-style: italic;
+      background: #FFF8E7;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-top: 10px;
+    }
+    .qr-card-full {
+      grid-column: 1 / -1;
+    }
+
+    /* ── FAQ styles ── */
+    .faq-item {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .faq-q {
+      padding: 14px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--olive-dark);
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      transition: background 0.15s;
+    }
+    .faq-q:hover { background: var(--olive-pale); }
+    .faq-q-text { flex: 1; }
+    .faq-arrow {
+      font-size: 12px;
+      color: var(--olive-mid);
+      transition: transform 0.2s;
+      margin-top: 2px;
+    }
+    .faq-item.open .faq-arrow { transform: rotate(180deg); }
+    .faq-a {
+      display: none;
+      padding: 0 20px 16px;
+      font-size: 13px;
+      color: var(--ink-mid);
+      line-height: 1.7;
+      border-top: 1px solid var(--cream-dark);
+    }
+    .faq-item.open .faq-a { display: block; }
+    .faq-a code {
+      background: var(--cream-dark);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    /* ── Back to top ── */
+    .back-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-light);
+      text-decoration: none;
+      margin-top: 8px;
+    }
+    .back-top:hover { color: var(--olive); }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: var(--ink-light);
+      border-top: 1px solid var(--border);
+      margin-top: 16px;
+    }
+
+    @media print {
+      .progress-strip, .reset-btn, .toc, .back-top { display: none; }
+      .item { break-inside: avoid; }
+      .faq-a { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>HKN Admin Help &amp; Checklist</h1>
+    <p>Annual cycle · Quick reference · Troubleshooting</p>
+  </div>
+  <div class="header-badge">portal.hindikineev.org</div>
+</div>
+
+<!-- Table of Contents -->
+<div class="toc">
+  <span class="toc-label">Jump to</span>
+  <a href="#checklist">📋 Annual Checklist</a>
+  <a href="#quickref">⚡ Quick Reference</a>
+  <a href="#faq">❓ FAQ &amp; Troubleshooting</a>
+</div>
+
+<!-- Progress bar -->
+<div class="progress-strip">
+  <div class="progress-bar-outer">
+    <div class="progress-bar-inner" id="progress-bar"></div>
+  </div>
+  <div class="progress-label" id="progress-label">0 of 0 done</div>
+  <button class="reset-btn" onclick="resetAll()">↺ Reset checklist</button>
+</div>
+
+<div class="container">
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 1 — ANNUAL CHECKLIST
+  ══════════════════════════════════════════════════ -->
+  <div class="section-heading" id="checklist">
+    <div class="icon icon-checklist">📋</div>
+    <div>
+      <h2>Annual Cycle Checklist</h2>
+      <p>Click each item to mark it done. Progress is saved in your browser.</p>
+    </div>
+  </div>
+
+  <!-- Phase: End of Year -->
+  <div class="phase phase-end">
+    <div class="phase-header">
+      <span class="phase-icon">🎓</span>
+      <span class="phase-title">End of Year</span>
+      <span class="phase-timing">May</span>
+      <span class="phase-count" id="count-end"></span>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Data &amp; Backup</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">1</div><div class="item-cb"></div>
+        <div class="item-text">Export backup JSON from portal
+          <span class="tag tag-portal">Portal</span>
+          <span class="item-note">School Attributes → Export backup</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">2</div><div class="item-cb"></div>
+        <div class="item-text">Verify all attendance is recorded for the final Spring session class
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">3</div><div class="item-cb"></div>
+        <div class="item-text">Verify all fees are marked paid (or noted as exceptions)
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Closing the Session</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">4</div><div class="item-cb"></div>
+        <div class="item-text">Student Directory → filter Status: Active + Session: Spring-YYYY → Bulk set status to <strong>Alumni</strong>
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">5</div><div class="item-cb"></div>
+        <div class="item-text">Verify student count looks right after alumni conversion</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">6</div><div class="item-cb"></div>
+        <div class="item-text">Export another backup JSON after status changes
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Certificates &amp; Celebration</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">7</div><div class="item-cb"></div>
+        <div class="item-text">Generate and print certificates for all students</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">8</div><div class="item-cb"></div>
+        <div class="item-text">Generate diplomas for graduates (Book 5 completers)</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">9</div><div class="item-cb"></div>
+        <div class="item-text">Hold end-of-year celebration / graduation event</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">10</div><div class="item-cb"></div>
+        <div class="item-text">Send end-of-year thank you email to all Active (now Alumni) families
+          <span class="tag tag-email">Email</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase: Enrollment Opening -->
+  <div class="phase phase-open">
+    <div class="phase-header">
+      <span class="phase-icon">📬</span>
+      <span class="phase-title">Enrollment Opening</span>
+      <span class="phase-timing">June – July</span>
+      <span class="phase-count" id="count-open"></span>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Setup</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">1</div><div class="item-cb"></div>
+        <div class="item-text">Export backup JSON before making any changes
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">2</div><div class="item-cb"></div>
+        <div class="item-text">School Attributes → Sessions → create <strong>Fall-YYYY</strong> session with correct dates, fees, and class times
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">3</div><div class="item-cb"></div>
+        <div class="item-text">School Attributes → Sessions → check <strong>"Enrollment Open"</strong> for Fall-YYYY
+          <span class="tag tag-portal">Portal</span>
+          <span class="item-note">⚠️ Must be done BEFORE "Invite returning students" appears on Dashboard</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">4</div><div class="item-cb"></div>
+        <div class="item-text">School Attributes → toggle <strong>Parent Portal Access ON</strong>
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Invitations</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">5</div><div class="item-cb"></div>
+        <div class="item-text">Dashboard → click <strong>"✉️ Invite returning students"</strong>
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">6</div><div class="item-cb"></div>
+        <div class="item-text">Review returning alumni list — uncheck anyone not returning
+          <span class="item-note">Only alumni from the immediately preceding session appear — older alumni are excluded automatically</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">7</div><div class="item-cb"></div>
+        <div class="item-text">Review Interest waitlist — check anyone to include in this round</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">8</div><div class="item-cb"></div>
+        <div class="item-text">Set invite expiry days (default 14) → click <strong>Send invitations</strong></div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">9</div><div class="item-cb"></div>
+        <div class="item-text">Send enrollment invitation email to all Invited students
+          <span class="tag tag-email">Email</span>
+          <span class="item-note">Send Email → filter Status: Invited, Session: Fall-YYYY</span>
+        </div>
+      </div>
+    </div>
+    <div class="cl-section">
+      <div class="cl-section-label">Capacity Management</div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">10</div><div class="item-cb"></div>
+        <div class="item-text">If capacity reached — send waitlist email to remaining Interest students
+          <span class="tag tag-email">Email</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">11</div><div class="item-cb"></div>
+        <div class="item-text">Monitor enrollment progress via Dashboard</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase: Enrollment in Progress -->
+  <div class="phase phase-enroll">
+    <div class="phase-header">
+      <span class="phase-icon">📋</span>
+      <span class="phase-title">Enrollment in Progress</span>
+      <span class="phase-timing">July – August</span>
+      <span class="phase-count" id="count-enroll"></span>
+    </div>
+    <div class="cl-section">
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">1</div><div class="item-cb"></div>
+        <div class="item-text">Review In-Process students as parents complete enrollment forms
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">2</div><div class="item-cb"></div>
+        <div class="item-text">Assign teacher and class time to each In-Process student
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">3</div><div class="item-cb"></div>
+        <div class="item-text">Complete intake assessment → promote student to <strong>Active</strong>
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">4</div><div class="item-cb"></div>
+        <div class="item-text">Send enrollment confirmation email to newly Active students
+          <span class="tag tag-email">Email</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">5</div><div class="item-cb"></div>
+        <div class="item-text">Collect Zelle payments → mark fees paid in portal
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase: Start of Year -->
+  <div class="phase phase-start">
+    <div class="phase-header">
+      <span class="phase-icon">🏫</span>
+      <span class="phase-title">Start of Year</span>
+      <span class="phase-timing">September</span>
+      <span class="phase-count" id="count-start"></span>
+    </div>
+    <div class="cl-section">
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">1</div><div class="item-cb"></div>
+        <div class="item-text">Export backup JSON
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">2</div><div class="item-cb"></div>
+        <div class="item-text">Verify all Active students have teacher and class time assigned
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">3</div><div class="item-cb"></div>
+        <div class="item-text">Hold Orientation Day for new students and parents</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">4</div><div class="item-cb"></div>
+        <div class="item-text">Distribute books to students at first class</div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">5</div><div class="item-cb"></div>
+        <div class="item-text">Update Book Inventory spreadsheet — paste Active student export into Students tab
+          <span class="tag tag-data">Data</span>
+          <span class="item-note">inventory.html → Export Students → paste into Google Sheet Students tab</span>
+        </div>
+      </div>
+      <div class="item" onclick="toggle(this)">
+        <div class="item-num">6</div><div class="item-cb"></div>
+        <div class="item-text">Teachers begin taking attendance from first class
+          <span class="tag tag-portal">Portal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <a href="#" class="back-top">↑ Back to top</a>
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 2 — QUICK REFERENCE
+  ══════════════════════════════════════════════════ -->
+  <div class="section-heading" id="quickref">
+    <div class="icon icon-quickref">⚡</div>
+    <div>
+      <h2>Quick Reference</h2>
+      <p>Step-by-step reminders for occasional admin tasks</p>
+    </div>
+  </div>
+
+  <div class="qr-grid">
+
+    <div class="qr-card">
+      <div class="qr-card-title">🎓 Closing a session</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>Student Directory → filter Status: <strong>Active</strong> + Session: Spring-YYYY</li>
+          <li>Bulk Action → <strong>Set status to Alumni</strong></li>
+          <li>Export backup JSON immediately after</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">📬 Inviting returning students</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>School Attributes → Sessions → check <strong>Enrollment Open</strong> for Fall-YYYY first</li>
+          <li>Dashboard → <strong>"✉️ Invite returning students"</strong></li>
+          <li>Left column: uncheck anyone not returning</li>
+          <li>Right column: check any Interest students to include</li>
+          <li>Set expiry days → <strong>Send invitations</strong></li>
+        </ol>
+        <div class="qr-note">⚠️ Enrollment Open must be set before this button appears</div>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">🔓 Opening / closing parent portal</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>School Attributes → <strong>Parent Portal Access</strong> toggle</li>
+          <li>Turn OFF before deploying updates</li>
+          <li>Turn ON after verifying the live portal</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">🔒 Opening / closing staff portal</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>School Attributes → <strong>Staff Portal Access</strong> toggle</li>
+          <li>Turn OFF for teacher/viewer-affecting changes</li>
+          <li>Admin always gets through regardless</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qr-card qr-card-full">
+      <div class="qr-card-title">🚀 Deploying a portal update (index.html)</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>Export backup JSON from portal</li>
+          <li>School Attributes → disable <strong>Parent Portal Access</strong></li>
+          <li>School Attributes → disable <strong>Staff Portal Access</strong></li>
+          <li>Upload new <code>index.html</code> to GitHub repository</li>
+          <li>Wait ~2 minutes for GitHub Pages to propagate</li>
+          <li>Log in as admin on live portal and verify the change</li>
+          <li>Re-enable <strong>Staff Portal Access</strong></li>
+          <li>Re-enable <strong>Parent Portal Access</strong></li>
+        </ol>
+        <div class="qr-note">⚠️ For UI-only changes (directory columns, styling) you can skip steps 2–3. Always required for intake flow changes.</div>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">💾 Restoring from backup</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>School Attributes → <strong>Restore from backup</strong></li>
+          <li>Choose the JSON file from your Downloads or Google Drive folder</li>
+          <li>Portal immediately saves restored data to Drive</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">🔍 Finding teacher aide volunteers</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>Open the Drive JSON in Notepad++ or VS Code</li>
+          <li>Search (Ctrl+F) for <code>volunteer</code> or <code>aide</code></li>
+          <li>Parent name appears a few lines above in the same record</li>
+        </ol>
+        <div class="qr-note">Or use Student Directory search box — now searches notes fields too</div>
+      </div>
+    </div>
+
+    <div class="qr-card">
+      <div class="qr-card-title">📚 Updating book inventory</div>
+      <div class="qr-card-body">
+        <ol class="qr-steps">
+          <li>Open <code>inventory.html</code> → Export Students section</li>
+          <li>Select session and status (Active) → Download CSV</li>
+          <li>Open Google Sheet → Students tab → paste CSV data</li>
+          <li>Distributed counts update automatically via COUNTIF</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+  <a href="#" class="back-top">↑ Back to top</a>
+
+  <!-- ══════════════════════════════════════════════════
+       SECTION 3 — FAQ & TROUBLESHOOTING
+  ══════════════════════════════════════════════════ -->
+  <div class="section-heading" id="faq">
+    <div class="icon icon-faq">❓</div>
+    <div>
+      <h2>FAQ &amp; Troubleshooting</h2>
+      <p>Click a question to expand the answer</p>
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">Parent portal shows "enrollment closed" even though I turned it on</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      The <code>intakeEnabled</code> setting is fetched from Apps Script for public users. After toggling in School Attributes, wait 1–2 minutes and ask the parent to do a hard refresh (Ctrl+Shift+R). If it still shows closed, verify the toggle is saved by checking School Attributes again.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">A new staff member logs in and sees no students</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      The portal stores data in localStorage per browser per device. <strong>Teacher</strong> role always self-initializes on login via DriveSync. <strong>Viewer</strong> role also runs DriveSync on login (fixed in current version). If a viewer still sees nothing, have them log out and log back in. If still empty, an admin logging in once on that device will seed the data.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">"Invite returning students" button doesn't appear on Dashboard</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      The button only appears when a session has <strong>Enrollment Open</strong> checked. Go to School Attributes → Sessions → find Fall-YYYY → check the Enrollment Open checkbox and save. Then return to the Dashboard.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">Date of birth shows one day off in the Student Directory</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      This was a timezone bug — JavaScript was interpreting <code>YYYY-MM-DD</code> dates as UTC midnight, which shifted one day back in Pacific Time. Fixed in the current version of <code>index.html</code>. If you see it, you may be on an older deployed version.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">GitHub Pages not showing my latest changes</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      GitHub Pages can take 1–5 minutes to propagate after a push. Do a hard refresh (Ctrl+Shift+R) to bypass browser cache. Check the <strong>Actions</strong> tab in the GitHub repository to confirm the deployment completed successfully (green checkmark).
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">Parent says they filled out the interest form but nothing happened</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      Interest status is correct — it means we have their form on file. They will not receive further communication until they are moved to <strong>Invited</strong> when enrollment opens. If they return to the parent portal, they will see a message confirming we have their form.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">Send Email shows no recipients</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      Check the <strong>Status</strong> and <strong>Session</strong> filters in the Send Email modal — they default to Active + current session, which may not match your data. Try setting Session to "All sessions" or changing the Status filter. Also verify the students you expect are in the correct status in the Student Directory.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">Active student logs into parent portal and sees no student info</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      The parent portal for Active students now shows a welcome screen first with either an admin message or a quote of the day. The student info appears after clicking <strong>Continue →</strong>. If the Continue button is missing or info is blank, check the browser console (F12) for errors and confirm the student record has a valid session assignment.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">How do I edit the Active Student Portal Message?</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      Go to School Attributes → <strong>Active Student Portal Message</strong> section. Type your message (supports multiple lines), then click <strong>Save message</strong>. Leave it blank to show the daily Hindi/Indian quote instead. The message is stored in the Drive JSON and is available to all public users immediately.
+    </div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">
+      <span class="faq-q-text">How do I back up the portal data?</span>
+      <span class="faq-arrow">▼</span>
+    </div>
+    <div class="faq-a">
+      School Attributes → <strong>Export backup</strong> — downloads the full JSON to your Downloads folder. You can also navigate to your Google Drive synced folder in the file dialog if you have Google Drive for Desktop installed. Google Drive also maintains automatic version history on the portal JSON file — right-click the file in Drive → Manage versions to restore an older copy.
+    </div>
+  </div>
+
+  <a href="#" class="back-top">↑ Back to top</a>
+
+  <div class="footer">
+    Hindi Ki Neev &middot; info@hindikineev.org &middot; hindikineev.org &middot; portal.hindikineev.org
+  </div>
+
+</div>
+
+<script>
+  // ── Checklist toggle ──────────────────────────────────────
+  function toggle(item) {
+    item.classList.toggle('done');
+    save();
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const all  = document.querySelectorAll('.item');
+    const done = document.querySelectorAll('.item.done');
+    const pct  = all.length ? Math.round((done.length / all.length) * 100) : 0;
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = `${done.length} of ${all.length} done`;
+    [
+      ['count-end',    '.phase-end .item'],
+      ['count-open',   '.phase-open .item'],
+      ['count-enroll', '.phase-enroll .item'],
+      ['count-start',  '.phase-start .item'],
+    ].forEach(([id, sel]) => {
+      const total = document.querySelectorAll(sel).length;
+      const done  = document.querySelectorAll(sel + '.done').length;
+      const el = document.getElementById(id);
+      if (el) el.textContent = `${done}/${total}`;
+    });
+  }
+
+  function save() {
+    const state = [...document.querySelectorAll('.item')].map(i => i.classList.contains('done'));
+    try { localStorage.setItem('hkn_help_checklist', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function load() {
+    try {
+      const state = JSON.parse(localStorage.getItem('hkn_help_checklist') || '[]');
+      document.querySelectorAll('.item').forEach((item, i) => {
+        if (state[i]) item.classList.add('done');
+      });
+    } catch(e) {}
+    updateProgress();
+  }
+
+  function resetAll() {
+    if (!confirm('Reset all checklist items?')) return;
+    document.querySelectorAll('.item.done').forEach(i => i.classList.remove('done'));
+    save();
+    updateProgress();
+  }
+
+  // ── FAQ toggle ────────────────────────────────────────────
+  function toggleFaq(item) {
+    item.classList.toggle('open');
+  }
+
+  load();
+</script>
+</body>
+</html>
