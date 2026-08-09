@@ -3448,7 +3448,7 @@ function renderClassCards() {
             const _isOwnClass = currentUser.role === 'teacher' &&
               (cls.teacher || '').toLowerCase().includes((currentUser.name || '').split(' ')[0].toLowerCase());
             const _canEditNote = isAdmin || _isOwnClass;
-            return _canEditNote
+            const _notesBlock = _canEditNote
               ? `<textarea
                   id="class-notes-${noteKey}"
                   class="form-textarea"
@@ -3458,6 +3458,13 @@ function renderClassCards() {
                   style="font-size:12px;resize:vertical;overflow-y:auto;"
                 >${escHtml(notes)}</textarea>`
               : `<div style="font-size:12px;color:var(--ink-mid);padding:6px 8px;background:var(--cream-dark);border-radius:var(--radius-sm);min-height:36px;">${escHtml(notes) || '<span style="color:var(--ink-light);">No notes</span>'}</div>`;
+            const _homeworkBtn = _canEditNote
+              ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px;font-size:12px;"
+                   onclick="openHomeworkNoteDialog('${escAttr(sessName)}','${escAttr(cls.teacher)}','${escAttr(cls.classTime)}')">
+                   📝 Add Homework Note
+                 </button>`
+              : '';
+            return _notesBlock + _homeworkBtn;
           })()}
         </div>
       </div>`;
@@ -3489,6 +3496,57 @@ function saveClassNote(sessName, teacher, classTime) {
   DB.saveClassNote(sessName, teacher, classTime, finalNote);
   if (el) el.value = finalNote; // update textarea to show dated version
   showToast('Notes saved', 'success');
+}
+
+function openHomeworkNoteDialog(sessName, teacher, classTime) {
+  const html = `
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <div class="modal-title">Add Homework Note</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
+          This note will be added to <strong>every student</strong> in ${escHtml(teacher)}'s
+          ${escHtml(classTime)} class. Each student's parent will see it in their portal.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Homework instructions</label>
+          <textarea class="form-textarea" id="homework-note-text" rows="4"
+            placeholder="e.g. Complete exercises on pages 12-14, review vocabulary list"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveHomeworkNoteToClass('${escAttr(sessName)}','${escAttr(teacher)}','${escAttr(classTime)}')">Add to class</button>
+      </div>
+    </div>`;
+  showModal(html);
+}
+
+function saveHomeworkNoteToClass(sessName, teacher, classTime) {
+  const text = document.getElementById('homework-note-text')?.value.trim();
+  if (!text) { showToast('Please enter the homework instructions', 'error'); return; }
+
+  const today = new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  const homeworkLine = `Homework ${today}: ${text}`;
+
+  // Same class-membership logic as renderClassCards
+  const classStudents = DB.getStudents().filter(s => {
+    const sd = (s.sessionData || []).find(d => d.session === sessName);
+    return sd && sd.teacher === teacher && sd.classTime === classTime;
+  });
+
+  classStudents.forEach(s => {
+    const sd = (s.sessionData || []).find(d => d.session === sessName);
+    if (!sd) return;
+    sd.notes = sd.notes ? sd.notes + '\n' + homeworkLine : homeworkLine;
+    DB.saveStudent(s);
+  });
+
+  closeModal();
+  showToast(`Homework note added to ${classStudents.length} student${classStudents.length !== 1 ? 's' : ''}`, 'success');
+  renderClassCards();
 }
 
 // ── SCORING GUIDE ─────────────────────────────────────────────
