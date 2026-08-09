@@ -5342,6 +5342,14 @@ function renderEmail() {
             <option value="">All sessions</option>
             ${sessions.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
           </select>
+          <select class="form-select" id="email-filter-level" onchange="loadEmailRecipients()">
+            <option value="">All levels</option>
+            ${DB.getClassLevels().map(l => `<option value="${l}">${l}</option>`).join('')}
+          </select>
+          <select class="form-select" id="email-filter-teacher" onchange="loadEmailRecipients()">
+            <option value="">All teachers</option>
+            ${(isAdmin ? DB.teacherNames() : [currentUser.name]).map(t => `<option value="${t}">${t}</option>`).join('')}
+          </select>
         </div>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
           <button class="btn btn-ghost btn-sm" onclick="toggleAllRecipients(true)">Select all</button>
@@ -5503,10 +5511,12 @@ async function preAuthorizeGmail() {
 }
 
 function loadEmailRecipients() {
-  const status  = document.getElementById('email-filter-status')?.value || '';
-  const session = document.getElementById('email-filter-session')?.value || '';
+  const status     = document.getElementById('email-filter-status')?.value || '';
+  const session    = document.getElementById('email-filter-session')?.value || '';
+  const classLevel = document.getElementById('email-filter-level')?.value || '';
+  const teacher    = document.getElementById('email-filter-teacher')?.value || '';
   const isTeacher = currentUser.role === 'teacher';
-  let students = DB.searchStudents({ status, session }).filter(s => s.parentEmail);
+  let students = DB.searchStudents({ status, session, teacher, classLevel }).filter(s => s.parentEmail);
   // If arriving from fees tracker, pre-filter to selected students only
   if (_feeReminderIds.length > 0) {
     students = students.filter(s => _feeReminderIds.includes(s.id));
