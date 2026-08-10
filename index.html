@@ -4337,14 +4337,25 @@ function removeAttrFromBtn(btn) {
 // ── BOOK INVENTORY PAGE ──────────────────────────────────────
 let _selectedInventorySession = null; // remembers admin's session choice across re-renders
 
+function getPreviousSessionName(sessName) {
+  const sessions = DB.getSessions();
+  // Sort all sessions with real class dates chronologically by earliest date
+  const sorted = sessions
+    .filter(s => (s.classDates || []).length > 0)
+    .slice()
+    .sort((a, b) => a.classDates[0].localeCompare(b.classDates[0]));
+  const idx = sorted.findIndex(s => s.name === sessName);
+  if (idx <= 0) return ''; // no earlier session found
+  return sorted[idx - 1].name;
+}
+
 async function renderInventory() {
   const allSessions = DB.getSessions();
   const defaultSess = (SessionEngine.getActiveSession() || SessionEngine.getCurrentSession())?.name || 'Fall-2026';
   const sess = (_selectedInventorySession && allSessions.some(s => s.name === _selectedInventorySession))
     ? _selectedInventorySession
     : defaultSess;
-  const prevSessions = { 'Fall-2026': 'Spring-2026', 'Spring-2026': 'Winter-2025', 'Winter-2025': 'Fall-2025' };
-  const prevSess = prevSessions[sess] || '';
+  const prevSess = getPreviousSessionName(sess);
 
   document.getElementById('content-area').innerHTML = `
     <div class="page-header">
@@ -4356,6 +4367,11 @@ async function renderInventory() {
       <select class="form-select" id="inv-session-sel" onchange="changeInventorySession(this.value)" style="max-width:200px;">
         ${allSessions.map(s => `<option value="${escHtml(s.name)}" ${s.name === sess ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
       </select>
+      ${prevSess ? `
+        <button class="btn btn-secondary btn-sm" onclick="confirmCarryForwardStock('${escAttr(sess)}','${escAttr(prevSess)}')">
+          ⬅️ Copy ${escHtml(prevSess)}'s Remaining into Starting Stock
+        </button>
+      ` : ''}
     </div>
     <div id="inv-summary-area"><div style="padding:32px; text-align:center; color:var(--ink-light); font-size:13px;">Loading inventory…</div></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;">
@@ -4471,6 +4487,64 @@ async function renderInventory() {
 function changeInventorySession(newSess) {
   _selectedInventorySession = newSess;
   renderInventory();
+}
+
+function confirmCarryForwardStock(sess, prevSess) {
+  showConfirm(
+    '📚',
+    'Copy starting stock?',
+    `This will set <strong>${escHtml(sess)}</strong>'s Starting Stock for every book to <strong>${escHtml(prevSess)}</strong>'s current Remaining count. Any values already entered for ${escHtml(sess)} will be overwritten.`,
+    'Copy stock',
+    'btn-primary',
+    () => carryForwardStock(sess, prevSess)
+  );
+}
+
+async function carryForwardStock(sess, prevSess) {
+  try {
+    const prevPrevSess = getPreviousSessionName(prevSess);
+    const [invRows, repRows, tchRows, distRows] = await Promise.all([
+      _supabase.from('book_inventory').select('book_level, book_type, starting_stock').eq('session', prevSess),
+      _supabase.from('book_replacements').select('book_level, book_type').eq('session', prevSess),
+      _supabase.from('book_teacher_copies').select('book_level, book_type').eq('session', prevSess).eq('returned', false),
+      _supabase.rpc('get_distributed_books', { p_session: prevSess, p_prev_session: prevPrevSess }),
+    ]);
+    if (invRows.error) throw invRows.error;
+
+    const stockMap = {};
+    (invRows.data || []).forEach(r => { stockMap[r.book_level + '|' + r.book_type] = r.starting_stock; });
+    const repMap = {};
+    (repRows.data || []).forEach(r => { const k = r.book_level + '|' + r.book_type; repMap[k] = (repMap[k] || 0) + 1; });
+    const tchMap = {};
+    (tchRows.data || []).forEach(r => { const k = r.book_level + '|' + r.book_type; tchMap[k] = (tchMap[k] || 0) + 1; });
+    const distMap = {};
+    (distRows.data || []).forEach(r => { distMap[r.book_level] = parseInt(r.distributed) || 0; });
+
+    const LEVELS = ['Book 1','Book 2','Book 3','Book 4','Book 5'];
+    const TYPES  = ['Textbook','Exercise Book'];
+    const upserts = [];
+    LEVELS.forEach(lvl => {
+      TYPES.forEach(typ => {
+        const k = lvl + '|' + typ;
+        const remaining = (stockMap[k] ?? 0) - (distMap[lvl] ?? 0) - (repMap[k] ?? 0) - (tchMap[k] ?? 0);
+        upserts.push({
+          session: sess, book_level: lvl, book_type: typ,
+          starting_stock: Math.max(0, remaining),
+          updated_at: new Date().toISOString(),
+        });
+      });
+    });
+
+    const { error } = await _supabase.from('book_inventory')
+      .upsert(upserts, { onConflict: 'session,book_level,book_type' });
+    if (error) throw error;
+
+    showToast(`Starting stock for ${sess} updated from ${prevSess}'s remaining copies`, 'success');
+    renderInventory();
+  } catch(e) {
+    showToast('Failed to copy stock: ' + e.message, 'error');
+    console.warn('carryForwardStock:', e.message);
+  }
 }
 
 async function _loadInventorySummary(sess, prevSess) {
