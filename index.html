@@ -4343,7 +4343,7 @@ async function renderInventory() {
   document.getElementById('content-area').innerHTML = `
     <div class="page-header">
       <div class="page-title">📚 Book Inventory</div>
-      <div class="page-subtitle">Starting stock, distribution and remaining copies for <strong>${escHtml(sess)}</strong></div>
+      <div class="page-subtitle">Starting stock, assigned books for <strong>${escHtml(sess)}</strong>, and remaining inventory</div>
     </div>
     <div id="inv-summary-area"><div style="padding:32px; text-align:center; color:var(--ink-light); font-size:13px;">Loading inventory…</div></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;">
@@ -4566,7 +4566,7 @@ async function _loadInventorySummary(sess, prevSess) {
         </div>
         <div style="padding:10px 16px; font-size:11px; color:var(--ink-light); border-top:1px solid var(--border);">
           🟢 Sufficient &nbsp;🟡 Low (≤5) &nbsp;🔴 Out of stock &nbsp;·&nbsp;
-          <em>Assigned = new books needed (book level changed or new student). Starting stock is editable.</em>
+          <em>Assigned = new books needed (book level changed or new student). Remaining = Starting Stock minus Assigned/Replacements/Teacher Copies, calculated live — updates automatically as class assignments change. Starting stock is editable.</em>
         </div>
       </div>`;
 
