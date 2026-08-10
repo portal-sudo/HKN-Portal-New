@@ -4335,8 +4335,14 @@ function removeAttrFromBtn(btn) {
 
 // ── IMPORT PAGE ──────────────────────────────────────────────
 // ── BOOK INVENTORY PAGE ──────────────────────────────────────
+let _selectedInventorySession = null; // remembers admin's session choice across re-renders
+
 async function renderInventory() {
-  const sess = (SessionEngine.getActiveSession() || SessionEngine.getCurrentSession())?.name || 'Fall-2026';
+  const allSessions = DB.getSessions();
+  const defaultSess = (SessionEngine.getActiveSession() || SessionEngine.getCurrentSession())?.name || 'Fall-2026';
+  const sess = (_selectedInventorySession && allSessions.some(s => s.name === _selectedInventorySession))
+    ? _selectedInventorySession
+    : defaultSess;
   const prevSessions = { 'Fall-2026': 'Spring-2026', 'Spring-2026': 'Winter-2025', 'Winter-2025': 'Fall-2025' };
   const prevSess = prevSessions[sess] || '';
 
@@ -4344,6 +4350,12 @@ async function renderInventory() {
     <div class="page-header">
       <div class="page-title">📚 Book Inventory</div>
       <div class="page-subtitle">Starting stock, assigned books for <strong>${escHtml(sess)}</strong>, and remaining inventory</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+      <label class="form-label" style="margin:0; white-space:nowrap;">Session</label>
+      <select class="form-select" id="inv-session-sel" onchange="changeInventorySession(this.value)" style="max-width:200px;">
+        ${allSessions.map(s => `<option value="${escHtml(s.name)}" ${s.name === sess ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+      </select>
     </div>
     <div id="inv-summary-area"><div style="padding:32px; text-align:center; color:var(--ink-light); font-size:13px;">Loading inventory…</div></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;">
@@ -4454,6 +4466,11 @@ async function renderInventory() {
 
   // Load summary data
   await _loadInventorySummary(sess, prevSess);
+}
+
+function changeInventorySession(newSess) {
+  _selectedInventorySession = newSess;
+  renderInventory();
 }
 
 async function _loadInventorySummary(sess, prevSess) {
