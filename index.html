@@ -1221,12 +1221,17 @@ function showScreen(screen) {
 
 // ── AUTH ─────────────────────────────────────────────────────
 
-// Supabase client — anon/publishable key is safe in browser; RLS enforces access control
+// Supabase client — picks project based on domain, so the same index.html
+// can be deployed to both portal.hindikineev.org (production) and
+// portal-new.hindikineev.org (dev/test) without any manual editing.
+// Production is the narrow, explicit case; everything else (portal-new,
+// localhost, anything else) safely defaults to the dev project.
+const SUPABASE_CONFIG = (window.location.hostname === 'portal.hindikineev.org')
+  ? { url: 'https://dovmjcanfmswxofazvgc.supabase.co', key: 'sb_publishable_NiRzP3QvKZjbtt0AzNh0TA_aDW3rUXm' }  // production
+  : { url: 'https://fbujsdqjqeavfykgsttp.supabase.co', key: 'sb_publishable_d9-vJp9YW20CkWnEX7d3Tg_QaJ4FD8v' };  // dev/portal-new
+
 const { createClient } = supabase;
-const _supabase = createClient(
-  'https://dovmjcanfmswxofazvgc.supabase.co',
-  'sb_publishable_NiRzP3QvKZjbtt0AzNh0TA_aDW3rUXm'
-);
+const _supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
 
 // Capture provider_token (Google access token with gmail.send scope) when available.
 // provider_token is only present in the SIGNED_IN event during the OAuth redirect
