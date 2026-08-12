@@ -624,6 +624,7 @@ tbody tr { transition: background var(--transition); }
     </div>
     <div class="nav-right">
       <span id="drive-sync-status" style="font-size:13px; font-weight:600; color:rgba(255,255,255,0.85); margin-right:4px; cursor:pointer;" onclick="manualSync()" title="Click to refresh from Supabase"></span>
+      <span id="app-version-tag" style="font-size:10px; color:rgba(255,255,255,0.5); margin-right:10px;" title="App version — check this if unsure which file is deployed"></span>
       <span class="nav-user" id="nav-user-email"></span>
       <span class="nav-role-pill" id="nav-role-label"></span>
       <button class="nav-logout" onclick="doLogout()">Sign out</button>
@@ -1157,6 +1158,13 @@ function seedStudentsIfEmpty() {
 // HKN APP.JS  —  All UI logic
 // ═══════════════════════════════════════════════════════════════
 
+// ── VERSION ──────────────────────────────────────────────────
+// Bump this every time an updated index.html is generated — shown
+// in the top nav bar and checkable via console (APP_VERSION), so
+// it's always possible to tell which version a saved file or a
+// deployed site is actually running. Format: v<date>.<n>
+const APP_VERSION = 'v2026-08-12.1';
+
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
 const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -1195,6 +1203,10 @@ let intakeState = {};   // public intake flow state
 
 // ── BOOT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // Show app version immediately, regardless of login state or page path
+  const versionTag = document.getElementById('app-version-tag');
+  if (versionTag) versionTag.textContent = APP_VERSION;
+
   // seedAttributesIfEmpty and seedStudentsIfEmpty run after SupabaseSync.load()
   // completes inside loadAppShell() — not here, to avoid writing seed data to
   // Supabase before the cache is populated with real data.
