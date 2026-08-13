@@ -1526,6 +1526,27 @@ function renderDashboard() {
 
   const _motd = DB.getSettings().motd || '';
   const _motdDate = DB.getSettings().motdDate || '';
+
+  // Classes overview — now shown to both admin and teacher (replaces
+  // the old Sessions overview, which wasn't very useful on this page)
+  const classesOverviewHtml = (() => {
+    const sessName = activeSess?.name;
+    const students = allStudents.filter(s => s.status === 'Active');
+    const classMap = {};
+    students.forEach(s => {
+      const sd = (s.sessionData || []).find(d => d.session === sessName);
+      if (!sd || !sd.teacher) return;
+      const key = (sd.teacher || '') + '|' + (sd.classLevel || '') + '|' + (sd.classTime || '');
+      if (!classMap[key]) classMap[key] = { teacher: sd.teacher, classLevel: sd.classLevel || '—', classTime: sd.classTime || '—', count: 0 };
+      classMap[key].count++;
+    });
+    const rows = Object.values(classMap).sort((a,b) => a.teacher.localeCompare(b.teacher) || a.classTime.localeCompare(b.classTime));
+    if (!rows.length) return '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No active classes for this session.</div>';
+    return '<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Class Level</th><th>Class Time</th><th style="text-align:center;">Students</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><td style="font-weight:500;">' + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
+      '</tbody></table></div>';
+  })();
+
   const html = `
     ${_motd ? `
       <div style="background:var(--orange-light); border-left:4px solid var(--orange); border-radius:var(--radius-md); padding:10px 16px; margin-bottom:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
@@ -1561,45 +1582,18 @@ function renderDashboard() {
       </div>
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:4px;">
-      <div class="card">
-        <div class="card-title">Sessions overview</div>
-        <table>
-          <thead><tr><th>Session</th><th>Fees</th><th>Dates</th><th>Status</th></tr></thead>
-          <tbody>
-            ${sessions.map(s => `
-              <tr>
-                <td style="font-weight:500;">${s.name}</td>
-                <td>$${s.fees}</td>
-                <td>${s.classDates?.length || 0} days</td>
-                <td><span class="badge ${s.enrollmentOpen ? 'badge-active' : 'badge-alumni'}">${s.enrollmentOpen ? 'Open' : 'Closed'}</span></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+    ${currentUser.role === 'teacher' ? `
+      <div class="card" style="margin-top:4px;">
+        <div class="card-title">Classes overview</div>
+        ${classesOverviewHtml}
       </div>
-      <div class="card">
-        ${currentUser.role === 'teacher' ? `
+    ` : `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:4px;">
+        <div class="card">
           <div class="card-title">Classes overview</div>
-          ${(() => {
-            const sessName = activeSess?.name;
-            const students = allStudents.filter(s => s.status === 'Active');
-            // Build class groupings: key = teacher|classLevel|classTime
-            const classMap = {};
-            students.forEach(s => {
-              const sd = (s.sessionData || []).find(d => d.session === sessName);
-              if (!sd || !sd.teacher) return;
-              const key = (sd.teacher || '') + '|' + (sd.classLevel || '') + '|' + (sd.classTime || '');
-              if (!classMap[key]) classMap[key] = { teacher: sd.teacher, classLevel: sd.classLevel || '—', classTime: sd.classTime || '—', count: 0 };
-              classMap[key].count++;
-            });
-            const rows = Object.values(classMap).sort((a,b) => a.teacher.localeCompare(b.teacher) || a.classTime.localeCompare(b.classTime));
-            if (!rows.length) return '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No active classes for this session.</div>';
-            return '<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Class Level</th><th>Class Time</th><th style="text-align:center;">Students</th></tr></thead><tbody>' +
-              rows.map(r => '<tr><td style="font-weight:500;">' + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
-              '</tbody></table></div>';
-          })()}
-        ` : `
+          ${classesOverviewHtml}
+        </div>
+        <div class="card">
           <div class="card-title">Quick actions</div>
           <div style="display:flex; flex-direction:column; gap:10px;">
             ${currentUser.role === 'admin' ? `
@@ -1635,9 +1629,9 @@ function renderDashboard() {
               ❓ Help &amp; Checklist
             </a>
           </div>
-        `}
+        </div>
       </div>
-    </div>
+    `}
 
     ${feesPending > 0 ? `
       <div style="margin-top:16px; background:var(--warning-light); border:1px solid rgba(192,120,0,0.3); border-radius:var(--radius-md); padding:14px 18px; display:flex; align-items:center; gap:12px;">
@@ -3758,15 +3752,25 @@ function renderSessionCard(sess) {
           </div>
         </div>
       ` : ''}
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-        <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
-          <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Fees</div>
-          <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">$${sess.fees}</div>
+      ${currentUser.role === 'teacher' ? `
+        <div style="margin-bottom:14px;">
+          <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
+            <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Class days</div>
+            <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">${sess.classDates?.length || 0}</div>
+          </div>
         </div>
-        <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
-          <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Class days</div>
-          <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">${sess.classDates?.length || 0}</div>
+      ` : `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+          <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
+            <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Fees</div>
+            <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">$${sess.fees}</div>
+          </div>
+          <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
+            <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Class days</div>
+            <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">${sess.classDates?.length || 0}</div>
+          </div>
         </div>
+      `}
       </div>
       ${isAdmin ? `
         <div style="display:flex; gap:8px; border-top:1px solid var(--olive-mid); padding-top:12px; margin-top:4px;">
