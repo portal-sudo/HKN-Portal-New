@@ -107,7 +107,7 @@ Client ID is reused across projects.
 |-------|---------------|
 | `students` | All student records — bio info, `session_data` (attendance, scores, teacher, class level, book level, and per-session `notes` — see "Homework Notes" below), `status_history`, `last_parent_access` |
 | `sessions` | School sessions (Fall-2026, Spring-2026 etc.) with class dates, fees, enrollment status |
-| `teachers` | Teacher/admin accounts, including `last_login` — see "Teacher Activity & Presence" below |
+| `teachers` | Teacher/admin accounts, including `last_login` — see "Teacher & Admin Activity" below |
 | `templates` | Email templates |
 | `settings` | Portal settings (MOTD, intake/staff enabled, inactivity timer) — single row, `id = 1` |
 | `lookup_config` | Class levels, book levels, class times, class names |
@@ -116,16 +116,17 @@ Client ID is reused across projects.
 | `book_replacements` | Log of replacement books issued to students |
 | `book_teacher_copies` | Log of books given to teachers |
 | `admins` | Two protected admin accounts (`rajiv@`, `portal@`) — see "Admin Safety Net" below |
-| `teacher_presence` | Lightweight "last seen" heartbeat, one row per user — see "Teacher Activity & Presence" below |
+| `teacher_presence` | Lightweight "last seen" heartbeat, one row per user — see "Teacher & Admin Activity" below |
 
-### SECURITY DEFINER Functions (9 total)
+### SECURITY DEFINER Functions (10 total)
 - `is_admin()` / `is_portal_user()` — core role-check functions used by every RLS policy
 - `get_teacher_by_email(lookup_email)` — returns role for a logged-in user; checks `admins` first, then `teachers`
 - `get_public_data()` — returns settings + sessions for the anonymous parent portal. **Sessions are ordered by each session's actual earliest class date** (not by year/term text — see "Known Fixes" below for why this matters)
 - `lookup_student(email, first_name, dob)` — anonymous parent lookup
 - `save_student_from_intake(student_json)` — anonymous parent enrollment/interest submission
 - `get_distributed_books(session, prev_session)` — calculates new books needed for a session
-- `update_own_last_login()` — sets `teachers.last_login` to now(), scoped to only the calling user's own row (see "Teacher Activity & Presence" below)
+- `update_own_last_login()` — sets `last_login` (on `teachers` or `admins`, whichever actually has a matching row) for the calling user's own row only (see "Teacher & Admin Activity" below)
+- `get_admin_activity()` — the *only* way to read anything from `admins` client-side; explicitly gates on `is_admin()` and returns just email/name/last_login, not the whole table
 - `rls_auto_enable()` — Supabase-platform event trigger support function (not actively required by the app)
 
 ### Supabase Daily Backups
@@ -148,8 +149,11 @@ mean nobody could log in to fix it.
 
 **How it protects you:** `admins` has **no client-facing access at all** —
 Row Level Security is enabled with zero policies for `anon` or `authenticated`,
-so no code in the portal can ever read or write it directly. Only two SQL
-functions can see it: `get_teacher_by_email()` and `is_admin()`.
+so no code in the portal can ever read or write it directly. Three SQL
+functions can see it: `get_teacher_by_email()`, `is_admin()`, and
+`get_admin_activity()` (added August 2026, explicitly gates on `is_admin()`
+before returning anything, and only exposes email/name/last_login — see
+"Teacher & Admin Activity" below).
 
 **To add a protected admin**, this must be done directly in Supabase SQL Editor:
 ```sql
@@ -498,17 +502,24 @@ not obvious from the error message alone.
 
 ---
 
-## Teacher Activity & Presence
+## Teacher & Admin Activity
 
-Admin can see, at a glance, who's currently active and when each teacher
-last logged in — both on the **Dashboard** (a "Teacher activity" card,
-admin-only) and on **School Attributes → Teachers** (per-teacher detail).
+Admin can see, at a glance, who's currently active and when each person
+last logged in — teachers on the **Dashboard** ("Teacher activity" card) and
+on **School Attributes → Teachers**; admins on the Dashboard too ("Admin
+activity" card, deliberately kept separate from Teacher activity rather than
+merged, matching how admins are treated as a structurally distinct category
+everywhere else in this schema).
 
 **How "Active now" works:** each logged-in user's browser sends a heartbeat
 (upsert to `teacher_presence`) immediately on login, then every 60 seconds
-while a tab stays open. Anyone active within the last **2 minutes** shows as
-"🟢 Active now"; otherwise "Last seen Xm/Xh/Xd ago" (auto-scaling units, never
-raw minutes past the first hour). The threshold is a single constant
+while a tab stays open. This fires for **any** logged-in user regardless of
+role — so `teacher_presence` already captures admin activity too, with no
+separate table or extra fetch needed; the Dashboard's admin-activity display
+simply reuses the exact same `presenceMap` already fetched for teachers.
+Anyone active within the last **2 minutes** shows as "🟢 Active now";
+otherwise "Last seen Xm/Xh/Xd ago" (auto-scaling units, never raw minutes
+past the first hour). The threshold is a single constant
 (`PRESENCE_ACTIVE_THRESHOLD_MS` in `index.html`) if it ever needs adjusting.
 
 **Closing a tab without logging out** behaves the same as a clean logout
@@ -528,10 +539,17 @@ display correctly goes stale within a couple minutes of someone stepping
 away, even though their login session itself stays valid indefinitely.
 
 **`last_login`** is separate from presence — set once, at the moment of
-successful sign-in, via a narrow `update_own_last_login()` function that
-only ever touches that one column for the calling user's own row (not a
-general "update your own row" policy, which would also let a teacher modify
-`role` or other fields on their own row).
+successful sign-in, via `update_own_last_login()`, which tries updating both
+`teachers` and `admins` for the calling user's own row (an email only ever
+matches one of the two tables, so the other update silently affects 0 rows).
+Deliberately not a general "update your own row" policy on either table,
+which would also let someone modify `role` or other fields on their own row.
+
+**Reading admin activity specifically required a different approach than
+teachers**, since `admins` has zero direct SELECT access by design (see
+"Admin Safety Net" above) — `get_admin_activity()` is a narrow function that
+explicitly checks `is_admin()` before returning anything, and only exposes
+email/name/last_login, never the whole table.
 
 ---
 
@@ -584,8 +602,10 @@ general "update your own row" policy, which would also let a teacher modify
       isolated from production data now, with automatic domain-based
       switching in `index.html` (no manual file editing needed to deploy
       the same file to both repos)
-- [x] Teacher Activity & Presence feature added (Dashboard card + Teachers
-      subtab) — see dedicated section above
+- [x] Teacher & Admin Activity feature added (Dashboard cards + Teachers
+      subtab) — see dedicated section above; admin activity reuses the
+      teacher_presence data, with a narrow get_admin_activity() function
+      for the admins table specifically
 - [ ] Student photos — Storage bucket + `photo_path` column exist
       (foundation only); upload/display UI not yet built
 - [ ] Old Drive/Apps Script backend — no urgency, retire whenever convenient
