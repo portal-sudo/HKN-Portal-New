@@ -1623,12 +1623,12 @@ async function renderDashboard() {
         </div>
       </div>
     ` : ''}
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+    <div class="page-header" style="position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:12px;">
       <div>
         <div class="page-title">Dashboard</div>
         <div class="page-subtitle">Current session: <strong>${activeSess?.name || 'None'}</strong></div>
       </div>
-      <div onclick="filterByStatus('Active')" style="cursor:pointer;background:var(--olive-pale);border:2px solid var(--olive);border-radius:var(--radius-md);padding:10px 24px;text-align:center;min-width:100px;">
+      <div onclick="filterByStatus('Active')" style="position:absolute; left:50%; transform:translateX(-50%); cursor:pointer;background:var(--olive-pale);border:2px solid var(--olive);border-radius:var(--radius-md);padding:10px 24px;text-align:center;min-width:100px;">
         <div style="font-size:42px;font-weight:700;color:var(--olive);line-height:1;">${counts['Active']}</div>
         <div style="font-size:11px;color:var(--olive);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;font-weight:600;">Active students</div>
       </div>
