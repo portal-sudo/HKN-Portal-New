@@ -11,6 +11,9 @@
 -- last_login column, and update_own_last_login() function. See
 -- Section 4C below for an important PostgREST schema cache gotcha
 -- hit while building this.
+-- Updated: August 2026 — added admins.last_login and get_admin_activity()
+-- so admin can see other admins' activity too, without adding any
+-- direct SELECT access to the admins table itself.
 --
 -- Run this top-to-bottom on a FRESH Supabase project to recreate the
 -- entire structure: tables, constraints, RLS, policies, functions,
@@ -38,6 +41,7 @@ create table admins (
   first_name  text not null,
   last_name   text not null,
   phone       text default '',
+  last_login  timestamptz,
   created_at  timestamptz not null default now()
 );
 
@@ -205,7 +209,9 @@ $function$;
 -- Narrow SECURITY DEFINER function — only ever touches last_login for
 -- the calling user's own row. Deliberately not a general "update your
 -- own row" RLS policy, which would also let a teacher modify role,
--- email, etc. on their own row.
+-- email, etc. on their own row. Updated August 2026 to also try
+-- admins — an email only ever matches one of the two tables, so the
+-- other UPDATE silently affects 0 rows.
 create or replace function update_own_last_login()
 returns void
 language plpgsql
@@ -215,6 +221,31 @@ begin
   update teachers
   set last_login = now()
   where lower(email) = lower(auth.jwt() ->> 'email');
+
+  update admins
+  set last_login = now()
+  where lower(email) = lower(auth.jwt() ->> 'email');
+end;
+$function$;
+
+-- Narrow, admin-only function to read admin activity. Deliberately
+-- NOT a SELECT policy on admins itself — that table stays completely
+-- unreachable by any client-side query, by design (see README "Admin
+-- Safety Net"). Explicitly gates on is_admin() before returning
+-- anything, and only exposes email/name/last_login — not the whole
+-- table (e.g. not phone).
+create or replace function get_admin_activity()
+returns table(email text, first_name text, last_name text, last_login timestamptz)
+language plpgsql
+stable security definer
+as $function$
+begin
+  if not is_admin() then
+    raise exception 'Not authorized';
+  end if;
+  return query
+    select a.email, a.first_name, a.last_name, a.last_login
+    from admins a;
 end;
 $function$;
 
