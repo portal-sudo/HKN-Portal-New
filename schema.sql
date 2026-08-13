@@ -7,6 +7,10 @@
 -- Updated: August 2026 — added student-photos Storage bucket, its
 -- access policies, and the students.photo_path column (foundation
 -- only — upload/display UI not yet built as of this update).
+-- Updated: August 2026 — added teacher_presence table, teachers.
+-- last_login column, and update_own_last_login() function. See
+-- Section 4C below for an important PostgREST schema cache gotcha
+-- hit while building this.
 --
 -- Run this top-to-bottom on a FRESH Supabase project to recreate the
 -- entire structure: tables, constraints, RLS, policies, functions,
@@ -44,6 +48,7 @@ create table teachers (
   email       text not null unique,
   phone       text,
   role        text not null default 'teacher',
+  last_login  timestamptz,
   created_at  timestamptz not null default now()
 );
 
@@ -195,6 +200,22 @@ as $function$
     select 1 from teachers
     where lower(email) = lower(auth.jwt() ->> 'email')
   );
+$function$;
+
+-- Narrow SECURITY DEFINER function — only ever touches last_login for
+-- the calling user's own row. Deliberately not a general "update your
+-- own row" RLS policy, which would also let a teacher modify role,
+-- email, etc. on their own row.
+create or replace function update_own_last_login()
+returns void
+language plpgsql
+security definer
+as $function$
+begin
+  update teachers
+  set last_login = now()
+  where lower(email) = lower(auth.jwt() ->> 'email');
+end;
 $function$;
 
 create or replace function get_teacher_by_email(lookup_email text)
@@ -603,6 +624,59 @@ using (
   bucket_id = 'student-photos'
   and is_admin()
 );
+
+
+-- =====================================================================
+-- SECTION 4C — TEACHER PRESENCE
+-- Added August 2026. Lightweight "last seen" heartbeat table — a
+-- client-side timer upserts a row for the logged-in user every 60s
+-- while a tab is open. Admin can see everyone's; each user can only
+-- write their own row. Combined with teachers.last_login (added to
+-- the teachers table above), this gives admin a rough "who's active
+-- now / when did they last sign in" view without needing a genuine
+-- realtime presence system.
+--
+-- IMPORTANT — a real gotcha hit while building this: PostgREST caches
+-- table/policy structure separately from the database itself. Tables
+-- and policies created directly via SQL Editor are sometimes not
+-- picked up immediately, causing confusing 401/42501 errors on
+-- otherwise-correct policies. If this ever recurs after adding new
+-- tables/policies via SQL, run:
+--   NOTIFY pgrst, 'reload schema';
+-- before spending time re-checking policy correctness.
+--
+-- Also worth knowing: an upsert (INSERT ... ON CONFLICT DO UPDATE)
+-- requires a SELECT policy in addition to INSERT/UPDATE — both to
+-- check for conflicts, and because PostgREST returns the written row
+-- by default. A user needs to be able to SELECT their own row for
+-- their own upsert to succeed, not just INSERT/UPDATE it.
+-- =====================================================================
+
+create table teacher_presence (
+  email      text primary key,
+  last_seen  timestamptz not null default now()
+);
+
+alter table teacher_presence enable row level security;
+
+create policy "teacher_presence_select_admin"
+on teacher_presence for select
+using (is_admin());
+
+create policy "teacher_presence_select_own"
+on teacher_presence for select
+using (lower(email) = lower(auth.jwt() ->> 'email'));
+
+create policy "teacher_presence_insert_own"
+on teacher_presence for insert
+with check (lower(email) = lower(auth.jwt() ->> 'email'));
+
+create policy "teacher_presence_update_own"
+on teacher_presence for update
+using (lower(email) = lower(auth.jwt() ->> 'email'))
+with check (lower(email) = lower(auth.jwt() ->> 'email'));
+
+grant select, insert, update on teacher_presence to authenticated;
 
 
 -- =====================================================================
