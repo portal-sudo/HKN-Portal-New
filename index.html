@@ -1575,6 +1575,21 @@ async function renderDashboard() {
     </div>
   `).join('') : '';
 
+  // Admin activity — reuses the same presenceMap fetched above, since
+  // teacher_presence captures any logged-in user regardless of role.
+  // Uses get_admin_activity() rather than a direct table read, since
+  // the admins table itself has no client-facing SELECT access at all.
+  const adminActivityList = isAdminView ? await _fetchAdminActivity() : [];
+  const adminActivityHtml = adminActivityList.map(a => `
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--cream-dark);">
+      <span style="font-size:13px; font-weight:500;">${escHtml(a.first_name)} ${escHtml(a.last_name||'')}</span>
+      <div style="display:flex; gap:14px; font-size:11px;">
+        <span>${formatLastActive(a.email, presenceMap)}</span>
+        <span>${formatLastLogin(a.last_login)}</span>
+      </div>
+    </div>
+  `).join('');
+
   const _motd = DB.getSettings().motd || '';
   const _motdDate = DB.getSettings().motdDate || '';
 
@@ -1683,6 +1698,10 @@ async function renderDashboard() {
             </div>
           </div>
           ${isAdminView ? `
+            <div class="card">
+              <div class="card-title">Admin activity</div>
+              ${adminActivityHtml || '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No admins found.</div>'}
+            </div>
             <div class="card">
               <div class="card-title">Teacher activity</div>
               ${teacherActivityHtml || '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No teachers yet.</div>'}
@@ -4081,6 +4100,17 @@ async function _fetchTeacherPresence() {
     console.warn('teacher_presence fetch:', e.message);
   }
   return presenceMap;
+}
+
+async function _fetchAdminActivity() {
+  try {
+    const { data, error } = await _supabase.rpc('get_admin_activity');
+    if (error) { console.warn('get_admin_activity:', error.message); return []; }
+    return data || [];
+  } catch(e) {
+    console.warn('get_admin_activity:', e.message);
+    return [];
+  }
 }
 
 function formatLastActive(email, presenceMap) {
