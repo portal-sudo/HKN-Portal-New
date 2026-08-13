@@ -1644,52 +1644,53 @@ async function renderDashboard() {
           <div class="card-title">Classes overview</div>
           ${classesOverviewHtml}
         </div>
-        <div class="card">
-          <div class="card-title">Quick actions</div>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            ${currentUser.role === 'admin' ? `
-            <button class="btn btn-secondary w-full" onclick="navigateTo('add-student')" style="justify-content:flex-start; gap:10px;">
-              ➕ Add new student
-            </button>` : ''}
-            <button class="btn btn-secondary w-full" onclick="navigateTo('directory')" style="justify-content:flex-start; gap:10px;">
-              👥 View student directory
-            </button>
-            ${currentUser.role === 'admin' ? `
-              <button class="btn btn-secondary w-full" onclick="confirmSetAlumni()" style="justify-content:flex-start; gap:10px; border-color:var(--warning); color:var(--warning);">
-                🎓 Set all Active → Alumni
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="card">
+            <div class="card-title">Quick actions</div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              ${currentUser.role === 'admin' ? `
+              <button class="btn btn-secondary w-full" onclick="navigateTo('add-student')" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px;">
+                ➕ Add new student
+              </button>` : ''}
+              <button class="btn btn-secondary w-full" onclick="navigateTo('directory')" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px;">
+                👥 View student directory
               </button>
-              ${activeSess?.enrollmentOpen ? `
-                <button class="btn btn-primary w-full" onclick="openInviteReturningDialog()" style="justify-content:flex-start; gap:10px;">
-                  ✉️ Invite returning students
+              ${currentUser.role === 'admin' ? `
+                <button class="btn btn-secondary w-full" onclick="confirmSetAlumni()" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px; border-color:var(--warning); color:var(--warning);">
+                  🎓 Set all Active → Alumni
                 </button>
+                ${activeSess?.enrollmentOpen ? `
+                  <button class="btn btn-primary w-full" onclick="openInviteReturningDialog()" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px;">
+                    ✉️ Invite returning students
+                  </button>
+                ` : ''}
+                ${activeSess?.enrollmentOpen && activeSess?.term === 'Fall' ? `
+                  <button class="btn btn-secondary w-full" onclick="openBookNeedsDialog()" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px; border-color:var(--teal,#1F6B75); color:var(--teal,#1F6B75);">
+                    📚 Check book needs
+                  </button>
+                ` : ''}
+                ${activeSess?.enrollmentOpen && (activeSess?.term === 'Winter' || activeSess?.term === 'Spring') ? `
+                  <button class="btn btn-primary w-full" onclick="openRollForwardDialog()" style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px;">
+                    ⏩ Roll Active students to ${activeSess?.name}
+                  </button>
+                ` : ''}
               ` : ''}
-              ${activeSess?.enrollmentOpen && activeSess?.term === 'Fall' ? `
-                <button class="btn btn-secondary w-full" onclick="openBookNeedsDialog()" style="justify-content:flex-start; gap:10px; border-color:var(--teal,#1F6B75); color:var(--teal,#1F6B75);">
-                  📚 Check book needs
-                </button>
-              ` : ''}
-              ${activeSess?.enrollmentOpen && (activeSess?.term === 'Winter' || activeSess?.term === 'Spring') ? `
-                <button class="btn btn-primary w-full" onclick="openRollForwardDialog()" style="justify-content:flex-start; gap:10px;">
-                  ⏩ Roll Active students to ${activeSess?.name}
-                </button>
-              ` : ''}
-            ` : ''}
-            <a href="https://portal.hindikineev.org/help.html" target="_blank"
-              class="btn btn-secondary w-full"
-              style="justify-content:flex-start; gap:10px; text-decoration:none;">
-              ❓ Help &amp; Checklist
-            </a>
+              <a href="https://portal.hindikineev.org/help.html" target="_blank"
+                class="btn btn-secondary w-full"
+                style="justify-content:flex-start; gap:8px; padding:6px 12px; font-size:13px; text-decoration:none;">
+                ❓ Help &amp; Checklist
+              </a>
+            </div>
           </div>
+          ${isAdminView ? `
+            <div class="card">
+              <div class="card-title">Teacher activity</div>
+              ${teacherActivityHtml || '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No teachers yet.</div>'}
+            </div>
+          ` : ''}
         </div>
       </div>
     `}
-
-    ${isAdminView ? `
-      <div class="card" style="margin-top:16px;">
-        <div class="card-title">Teacher activity</div>
-        ${teacherActivityHtml || '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No teachers yet.</div>'}
-      </div>
-    ` : ''}
 
     ${feesPending > 0 ? `
       <div style="margin-top:16px; background:var(--warning-light); border:1px solid rgba(192,120,0,0.3); border-radius:var(--radius-md); padding:14px 18px; display:flex; align-items:center; gap:12px;">
