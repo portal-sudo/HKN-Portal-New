@@ -1305,6 +1305,11 @@ async function applySupabaseSession(session) {
     name:  teacher.first_name || email.split('@')[0],
   };
 
+  _startPresenceHeartbeat();
+  _supabase.rpc('update_own_last_login').then(({ error }) => {
+    if (error) console.warn('update_own_last_login:', error.message);
+  });
+
   if (teacher.role === 'teacher') {
     loadAppShell(true); // true = validate teacher after load
   } else {
@@ -1352,14 +1357,47 @@ async function manualSync() {
 
 async function doLogout() {
   try { await _supabase.auth.signOut(); } catch(e) { console.warn('signOut error:', e.message); }
+  _stopPresenceHeartbeat();
   currentUser = null;
   _clearInactivityTimer();
   showScreen('login');
 }
 function backToLogin() {
+  _stopPresenceHeartbeat();
   currentUser = null;
   _clearInactivityTimer();
   showScreen('login');
+}
+
+// ── TEACHER PRESENCE ─────────────────────────────────────────
+// Lightweight "last seen" heartbeat — updates every 60s while a tab
+// is open, so admin can see roughly who's currently active. Mobile
+// browsers suspend JS timers when a tab is backgrounded/screen locks,
+// so this naturally goes stale within ~2 min of someone stepping away,
+// even without an auto-logout timer.
+let _presenceHeartbeatTimer = null;
+
+async function _updatePresence() {
+  if (!currentUser) return;
+  try {
+    await _supabase.from('teacher_presence').upsert({
+      email: currentUser.email,
+      last_seen: new Date().toISOString(),
+    });
+  } catch(e) {
+    console.warn('_updatePresence:', e.message);
+  }
+}
+
+function _startPresenceHeartbeat() {
+  _updatePresence(); // fire immediately, then every 60s
+  if (_presenceHeartbeatTimer) clearInterval(_presenceHeartbeatTimer);
+  _presenceHeartbeatTimer = setInterval(_updatePresence, 60 * 1000);
+}
+
+function _stopPresenceHeartbeat() {
+  if (_presenceHeartbeatTimer) clearInterval(_presenceHeartbeatTimer);
+  _presenceHeartbeatTimer = null;
 }
 
 // ── INACTIVITY AUTO-LOGOUT ────────────────────────────────────
@@ -1513,7 +1551,7 @@ function navigateTo(page) {
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────
-function renderDashboard() {
+async function renderDashboard() {
   const counts = DB.getStatusCounts();
   const sessions = DB.getSessions();
   const activeSess = SessionEngine.getActiveSession();
@@ -1523,6 +1561,19 @@ function renderDashboard() {
     const sd = (s.sessionData||[]).find(d => d.session === activeSess?.name);
     return sd && !sd.feesPaid;
   }).length;
+
+  // Teacher activity — admin only, skip the fetch entirely for teachers
+  const isAdminView = currentUser.role === 'admin';
+  const presenceMap = isAdminView ? await _fetchTeacherPresence() : {};
+  const teacherActivityHtml = isAdminView ? DB.getTeachers().map(t => `
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--cream-dark);">
+      <span style="font-size:13px; font-weight:500;">${escHtml(t.firstName)} ${escHtml(t.lastName||'')}</span>
+      <div style="display:flex; gap:14px; font-size:11px;">
+        <span>${formatLastActive(t.email, presenceMap)}</span>
+        <span>${formatLastLogin(t.lastLogin)}</span>
+      </div>
+    </div>
+  `).join('') : '';
 
   const _motd = DB.getSettings().motd || '';
   const _motdDate = DB.getSettings().motdDate || '';
@@ -1632,6 +1683,13 @@ function renderDashboard() {
         </div>
       </div>
     `}
+
+    ${isAdminView ? `
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title">Teacher activity</div>
+        ${teacherActivityHtml || '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No teachers yet.</div>'}
+      </div>
+    ` : ''}
 
     ${feesPending > 0 ? `
       <div style="margin-top:16px; background:var(--warning-light); border:1px solid rgba(192,120,0,0.3); border-radius:var(--radius-md); padding:14px 18px; display:flex; align-items:center; gap:12px;">
@@ -4007,10 +4065,47 @@ function renderAttributesPortal() {
   `;
 }
 
+// ── TEACHER PRESENCE DISPLAY HELPERS ─────────────────────────
+// Shared by the Teachers subtab and the admin Dashboard.
+const PRESENCE_ACTIVE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+
+async function _fetchTeacherPresence() {
+  let presenceMap = {};
+  try {
+    const { data, error } = await _supabase.from('teacher_presence').select('email, last_seen');
+    if (!error && data) {
+      data.forEach(row => { presenceMap[row.email.toLowerCase()] = row.last_seen; });
+    }
+  } catch(e) {
+    console.warn('teacher_presence fetch:', e.message);
+  }
+  return presenceMap;
+}
+
+function formatLastActive(email, presenceMap) {
+  const lastSeen = presenceMap[(email || '').toLowerCase()];
+  if (!lastSeen) return '<span style="color:var(--ink-light);">Never active</span>';
+  const ageMs = Date.now() - new Date(lastSeen).getTime();
+  if (ageMs <= PRESENCE_ACTIVE_THRESHOLD_MS) {
+    return '<span style="color:var(--olive); font-weight:600;">🟢 Active now</span>';
+  }
+  const mins = Math.round(ageMs / 60000);
+  const label = mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins/60)}h ago` : `${Math.round(mins/1440)}d ago`;
+  return `<span style="color:var(--ink-light);">Last seen ${label}</span>`;
+}
+
+function formatLastLogin(lastLogin) {
+  if (!lastLogin) return '<span style="color:var(--ink-light);">Never logged in</span>';
+  const d = new Date(lastLogin);
+  return `<span style="color:var(--ink-light);">Last login: ${d.toLocaleDateString('en-US', {month:'short', day:'numeric'})}, ${d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'})}</span>`;
+}
+
 // ── Tab 2: Teachers ───────────────────────────────────────────
-function renderAttributesTeachers() {
+async function renderAttributesTeachers() {
   _currentAttrTab = 'teachers';
   const teachers = DB.getTeachers();
+  const presenceMap = await _fetchTeacherPresence();
+
   const teacherRows = teachers.map(t => {
     const key = encodeURIComponent(t.email || t.firstName);
     return `<div style="background:var(--olive-pale); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px;">
@@ -4022,6 +4117,10 @@ function renderAttributesTeachers() {
         <button class="btn-ghost btn-icon" style="padding:2px 6px; font-size:14px;" onclick="removeTeacher('${escAttr(t.email||t.firstName)}')">×</button>
       </div>
       <div style="font-size:11px; color:var(--ink-light); margin-top:2px;">${escHtml(t.phone||'')}</div>
+      <div style="display:flex; gap:14px; font-size:11px; margin-top:4px;">
+        <span>${formatLastActive(t.email, presenceMap)}</span>
+        <span>${formatLastLogin(t.lastLogin)}</span>
+      </div>
     </div>`;
   }).join('');
 
@@ -5044,6 +5143,7 @@ const SupabaseSync = {
         email:     row.email       || '',
         phone:     row.phone       || '',
         role:      row.role        || 'teacher',
+        lastLogin: row.last_login  || null,
       }));
 
       // ── Reassemble lookup config → classLevels, bookLevels, etc. ──
