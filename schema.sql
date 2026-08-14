@@ -5,8 +5,9 @@
 -- Updated: August 2026 — get_public_data() session ordering fix applied
 -- (see README "Known Fixes" for why the original ORDER BY was buggy).
 -- Updated: August 2026 — added student-photos Storage bucket, its
--- access policies, and the students.photo_path column (foundation
--- only — upload/display UI not yet built as of this update).
+-- access policies, and the students.photo_path column (originally
+-- foundation only; display + individual per-student upload UI added
+-- in a later update the same month — see README "Student Photos").
 -- Updated: August 2026 — added teacher_presence table, teachers.
 -- last_login column, and update_own_last_login() function. See
 -- Section 4C below for an important PostgREST schema cache gotcha
@@ -14,6 +15,8 @@
 -- Updated: August 2026 — added admins.last_login and get_admin_activity()
 -- so admin can see other admins' activity too, without adding any
 -- direct SELECT access to the admins table itself.
+-- Updated: August 2026 — fixed student_photos_select policy (was
+-- is_portal_user() only, excluding admins — see Section 4B below).
 --
 -- Run this top-to-bottom on a FRESH Supabase project to recreate the
 -- entire structure: tables, constraints, RLS, policies, functions,
@@ -618,6 +621,16 @@ create policy "book_teacher_copies_admin_write"
 -- bare URL. Read access for any admin/teacher; upload/replace/delete
 -- restricted to admin only. Reuses the same is_admin()/is_portal_user()
 -- functions already used throughout this schema.
+--
+-- Fixed August 2026: student_photos_select originally used
+-- is_portal_user() only, which checks the teachers table specifically.
+-- Admins (rajiv@, portal@) live in the separate admins table and have
+-- no row in teachers, so uploads failed for them even though they
+-- correctly passed is_admin() on the INSERT policy — an upload
+-- requires a working SELECT policy too, same lesson as the
+-- teacher_presence issue in Section 4C below. Fixed by checking
+-- is_admin() OR is_portal_user(), same pattern already used
+-- correctly elsewhere (e.g. the teachers table's own SELECT policy).
 -- =====================================================================
 
 insert into storage.buckets (id, name, public)
@@ -628,7 +641,7 @@ create policy "student_photos_select"
 on storage.objects for select
 using (
   bucket_id = 'student-photos'
-  and is_portal_user()
+  and (is_admin() or is_portal_user())
 );
 
 create policy "student_photos_insert"
