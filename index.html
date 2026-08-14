@@ -2183,6 +2183,7 @@ function renderStudentTable() {
     const sdB = (b.sessionData||[]).find(d => d.session === sesKeySort) || {};
     let va = '', vb = '';
     switch (currentSort.col) {
+      case 'id':      va = (a.studentId||'').toLowerCase(); vb = (b.studentId||'').toLowerCase(); break;
       case 'name':    va = (a.firstName+' '+a.lastName).toLowerCase(); vb = (b.firstName+' '+b.lastName).toLowerCase(); break;
       case 'parent':  va = (a.parentFirstName+' '+a.parentLastName).toLowerCase(); vb = (b.parentFirstName+' '+b.parentLastName).toLowerCase(); break;
       case 'status':  va = a.status||''; vb = b.status||''; break;
