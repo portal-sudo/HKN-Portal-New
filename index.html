@@ -1163,7 +1163,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-16.1';
+const APP_VERSION = 'v2026-08-16.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1376,6 +1376,7 @@ function backToLogin() {
 // so this naturally goes stale within ~2 min of someone stepping away,
 // even without an auto-logout timer.
 let _presenceHeartbeatTimer = null;
+let _parentCheckinBuckets = {}; // set by renderDashboard's chart, read by showParentCheckinBucket
 
 async function _updatePresence() {
   if (!currentUser) return;
@@ -1656,37 +1657,53 @@ async function renderDashboard() {
 
         const CAP_DAYS = 21; // individual bars for 0..20, then a 21+ bucket, then Never
         const today = new Date(); today.setHours(0,0,0,0);
-        const dayBuckets = {};
-        let neverCount = 0;
+        const dayBuckets = {}; // bucket -> array of {studentName, parentName}
+        const neverList = [];
 
         students.forEach(s => {
-          if (!s.lastParentAccess) { neverCount++; return; }
+          const entry = {
+            studentName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            parentName: `${s.parentFirstName || ''} ${s.parentLastName || ''}`.trim() || '—',
+          };
+          if (!s.lastParentAccess) { neverList.push(entry); return; }
           const lastVisit = new Date(s.lastParentAccess); lastVisit.setHours(0,0,0,0);
           const daysAgo = Math.max(0, Math.floor((today - lastVisit) / 86400000));
           const bucket = daysAgo >= CAP_DAYS ? CAP_DAYS : daysAgo;
-          dayBuckets[bucket] = (dayBuckets[bucket] || 0) + 1;
+          if (!dayBuckets[bucket]) dayBuckets[bucket] = [];
+          dayBuckets[bucket].push(entry);
         });
 
         const bars = [];
-        for (let d = 0; d < CAP_DAYS; d++) bars.push({ label: String(d), count: dayBuckets[d] || 0, tier: d <= 6 ? 'good' : 'warn' });
-        bars.push({ label: CAP_DAYS + '+', count: dayBuckets[CAP_DAYS] || 0, tier: 'bad' });
-        bars.push({ label: 'Never', count: neverCount, tier: 'bad' });
+        for (let d = 0; d < CAP_DAYS; d++) bars.push({ label: String(d), list: dayBuckets[d] || [], tier: d <= 6 ? 'good' : 'warn' });
+        bars.push({ label: CAP_DAYS + '+', list: dayBuckets[CAP_DAYS] || [], tier: 'bad' });
+        bars.push({ label: 'Never', list: neverList, tier: 'bad' });
 
-        const maxCount = Math.max(1, ...bars.map(b => b.count));
-        const tierColor = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--danger)' };
+        // Store full per-bucket lists in a global lookup, keyed by label,
+        // so the click handler can retrieve names without needing to
+        // serialize a whole array through an inline onclick attribute.
+        _parentCheckinBuckets = {};
+        bars.forEach(b => { _parentCheckinBuckets[b.label] = b.list; });
+
+        const maxCount = Math.max(1, ...bars.map(b => b.list.length));
+        const tierColor = { good: 'var(--success)', warn: '#E8A33D', bad: 'var(--danger)' };
 
         const chartW = 900, chartH = 200, padL = 30, padB = 30, padT = 10;
         const plotW = chartW - padL - 10, plotH = chartH - padB - padT;
         const barW = plotW / bars.length;
 
         const barsSvg = bars.map((b, i) => {
-          const h = (b.count / maxCount) * plotH;
+          const count = b.list.length;
+          const h = (count / maxCount) * plotH;
           const x = padL + i * barW;
           const y = padT + (plotH - h);
           const showLabel = (i % 2 === 0) || i >= CAP_DAYS; // thin out day labels to avoid crowding, always show 21+/Never
+          const clickable = count > 0;
           return `
-            <rect x="${x + barW*0.15}" y="${y}" width="${barW*0.7}" height="${h}" fill="${tierColor[b.tier]}" rx="2"/>
-            ${b.count > 0 ? `<text x="${x + barW/2}" y="${y - 4}" font-size="10" text-anchor="middle" fill="var(--ink-mid)">${b.count}</text>` : ''}
+            <rect x="${x + barW*0.15}" y="${y}" width="${barW*0.7}" height="${h}" fill="${tierColor[b.tier]}" rx="2"
+              ${clickable ? `style="cursor:pointer;" onclick="showParentCheckinBucket('${escAttr(b.label)}')"` : ''}>
+              ${clickable ? `<title>Click to see who's in this group</title>` : ''}
+            </rect>
+            ${count > 0 ? `<text x="${x + barW/2}" y="${y - 4}" font-size="10" text-anchor="middle" fill="var(--ink-mid)" ${clickable ? `style="cursor:pointer;" onclick="showParentCheckinBucket('${escAttr(b.label)}')"` : ''}>${count}</text>` : ''}
             ${showLabel ? `<text x="${x + barW/2}" y="${chartH - padB + 14}" font-size="9" text-anchor="middle" fill="var(--ink-light)">${b.label}</text>` : ''}
           `;
         }).join('');
@@ -1697,6 +1714,7 @@ async function renderDashboard() {
             <span style="color:${tierColor.good};">\u25CF 0\u20136 days</span> &nbsp;
             <span style="color:${tierColor.warn};">\u25CF 7\u201320 days</span> &nbsp;
             <span style="color:${tierColor.bad};">\u25CF 21+ days / never</span>
+            &nbsp;\u00b7&nbsp; <span style="font-style:italic;">click a bar to see names</span>
           </div>
           <svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%; height:auto; max-height:220px;">
             <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${chartH-padB}" stroke="var(--olive-mid)" stroke-width="1"/>
@@ -4171,6 +4189,42 @@ function renderAttributesPortal() {
 const PRESENCE_ACTIVE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 
 // ── STUDENT PHOTOS ────────────────────────────────────────────
+// ── PARENT CHECK-IN CHART DRILL-DOWN ─────────────────────────────
+function showParentCheckinBucket(label) {
+  const list = _parentCheckinBuckets[label] || [];
+  const dayDesc = label === 'Never' ? 'have never checked in'
+    : label.endsWith('+') ? `last checked in ${label} days ago (or more)`
+    : label === '0' ? 'checked in today'
+    : `last checked in ${label} day${label === '1' ? '' : 's'} ago`;
+
+  const html = `
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <div class="modal-title">${list.length} parent${list.length !== 1 ? 's' : ''}</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--ink-mid); margin-bottom:14px;">
+          Students whose parent ${escHtml(dayDesc)}:
+        </div>
+        ${list.length ? `
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            ${list.map(entry => `
+              <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--cream-dark); font-size:13px;">
+                <span style="font-weight:500;">${escHtml(entry.studentName)}</span>
+                <span style="color:var(--ink-light);">${escHtml(entry.parentName)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div style="font-size:13px;color:var(--ink-light);">No students in this group.</div>'}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      </div>
+    </div>`;
+  showModal(html);
+}
+
 async function _loadStudentPhotoIntoModal(photoPath) {
   try {
     const { data, error } = await _supabase.storage.from('student-photos').createSignedUrl(photoPath, 3600);
