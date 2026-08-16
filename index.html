@@ -1163,7 +1163,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-16.2';
+const APP_VERSION = 'v2026-08-16.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1172,7 +1172,8 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 let currentUser = null; // { email, role }
 let currentStudentFilter = {};
 let currentSort = { col: 'name', dir: 'asc' }; // directory sort state
-let _feeReminderIds = []; // student IDs pre-selected from fees tracker
+let _emailPreselectIds = []; // student IDs pre-selected from fees tracker (or other sources)
+let _emailPreselectLabel = ''; // describes why, shown in the Send Email banner
 
 // Replaces all window._* globals with a single managed state object
 const AppState = {
@@ -1662,6 +1663,7 @@ async function renderDashboard() {
 
         students.forEach(s => {
           const entry = {
+            id: s.id,
             studentName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
             parentName: `${s.parentFirstName || ''} ${s.parentLastName || ''}`.trim() || '—',
           };
@@ -3506,7 +3508,8 @@ function feeUpdateCount() {
 function feesSendReminders() {
   const ids = Array.from(document.querySelectorAll('.fee-remind-cb:checked')).map(cb => cb.value);
   if (ids.length === 0) { showToast('Select at least one student to send reminders', 'warning'); return; }
-  _feeReminderIds = ids;
+  _emailPreselectIds = ids;
+  _emailPreselectLabel = 'with unpaid fees from Fees tracker';
   navigateTo('email');
 }
 
@@ -4219,10 +4222,24 @@ function showParentCheckinBucket(label) {
         ` : '<div style="font-size:13px;color:var(--ink-light);">No students in this group.</div>'}
       </div>
       <div class="modal-footer">
+        ${(currentUser.role === 'admin' && list.length > 0) ? `
+          <button class="btn btn-primary" onclick="emailParentCheckinBucket('${escAttr(label)}')">✉️ Email these parents</button>
+        ` : ''}
         <button class="btn btn-secondary" onclick="closeModal()">Close</button>
       </div>
     </div>`;
   showModal(html);
+}
+
+function emailParentCheckinBucket(label) {
+  const list = _parentCheckinBuckets[label] || [];
+  if (!list.length) return;
+  _emailPreselectIds = list.map(entry => entry.id);
+  _emailPreselectLabel = label === 'Never'
+    ? 'who have never checked in to the parent portal'
+    : `who haven't checked in for ${label}${label.endsWith('+') ? '' : ' days'}`;
+  closeModal();
+  navigateTo('email');
 }
 
 async function _loadStudentPhotoIntoModal(photoPath) {
@@ -5790,7 +5807,7 @@ function renderEmail() {
       <div class="card">
         <div class="card-title">Recipients</div>
         <div class="filter-bar" style="margin-bottom:12px;">
-          <select class="form-select" id="email-filter-status" onchange="_feeReminderIds=[];loadEmailRecipients()">
+          <select class="form-select" id="email-filter-status" onchange="_emailPreselectIds=[];loadEmailRecipients()">
             <option value="">All statuses</option>
             ${STUDENT_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
           </select>
@@ -5913,13 +5930,13 @@ function renderEmail() {
     </div>
   `;
   document.getElementById('content-area').innerHTML = html;
-  // Show banner if arriving from fees tracker
-  if (_feeReminderIds.length > 0) {
+  // Show banner if arriving with pre-selected students from anywhere
+  if (_emailPreselectIds.length > 0) {
     const banner = document.createElement('div');
     banner.id = 'fee-reminder-banner';
     banner.style.cssText = 'background:var(--orange-light);border:1px solid rgba(242,125,38,0.3);border-radius:var(--radius-md);padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--orange-dark);';
-    banner.innerHTML = `<span>💰 Pre-selected <strong>${_feeReminderIds.length} student${_feeReminderIds.length !== 1 ? 's' : ''}</strong> with unpaid fees from Fees tracker</span>
-      <button class="btn btn-ghost btn-sm" onclick="_feeReminderIds=[];renderEmail();" style="color:var(--orange-dark);font-size:11px;">✕ Clear</button>`;
+    banner.innerHTML = `<span>📌 Pre-selected <strong>${_emailPreselectIds.length} student${_emailPreselectIds.length !== 1 ? 's' : ''}</strong>${_emailPreselectLabel ? ' ' + escHtml(_emailPreselectLabel) : ''}</span>
+      <button class="btn btn-ghost btn-sm" onclick="_emailPreselectIds=[];_emailPreselectLabel='';renderEmail();" style="color:var(--orange-dark);font-size:11px;">✕ Clear</button>`;
     const contentArea = document.getElementById('content-area');
     contentArea.insertBefore(banner, contentArea.firstChild);
   }
@@ -5927,7 +5944,7 @@ function renderEmail() {
   const _eSess = (SessionEngine.getActiveSession() || DB.getSessions().slice(-1)[0])?.name || '';
   const _eStat = document.getElementById('email-filter-status');
   const _eSession = document.getElementById('email-filter-session');
-  if (_eStat && !_feeReminderIds.length) _eStat.value = 'Active';
+  if (_eStat && !_emailPreselectIds.length) _eStat.value = 'Active';
   if (_eSession && _eSess) _eSession.value = _eSess;
   loadEmailRecipients();
   updateGmailAuthStatus();
@@ -5975,8 +5992,8 @@ function loadEmailRecipients() {
   const isTeacher = currentUser.role === 'teacher';
   let students = DB.searchStudents({ status, session, teacher, classLevel }).filter(s => s.parentEmail);
   // If arriving from fees tracker, pre-filter to selected students only
-  if (_feeReminderIds.length > 0) {
-    students = students.filter(s => _feeReminderIds.includes(s.id));
+  if (_emailPreselectIds.length > 0) {
+    students = students.filter(s => _emailPreselectIds.includes(s.id));
   }
   // Teachers only see parents of their own students in the selected (or active) session
   if (isTeacher) {
