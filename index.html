@@ -666,6 +666,14 @@ const _cache = {
 };
 
 const STUDENT_STATUSES = ['Interest','Invited','In-Process','Active','Alumni','Graduated','Dropped'];
+
+// Pre-composed message used by the "Email these parents" button on the
+// Dashboard's Parent Check-In chart — auto-fills Subject/Body when
+// arriving via that specific flow (see emailParentCheckinBucket()).
+const CHECKIN_REMINDER_TEMPLATE = {
+  subject: "A quick update on {{studentFirstName}}'s progress is waiting on the HKN Portal",
+  body: "Dear {{parentFirstName}},<br><br>We wanted to reach out because it's been a little while since you last checked in on {{studentFirstName}}'s notes on the HKN Portal. {{teacher}} has been adding homework and specific notes for {{studentFirstName}}, and checking in regularly is a great way to help {{studentFirstName}} keep making progress in learning Hindi.<br><br>When you log in, you'll need the same 4 details you provided during enrollment. If you run into any trouble accessing the portal, just reach out to info@hindikineev.org and we'll be happy to help.<br><br>Thank you for being part of {{studentFirstName}}'s Hindi learning journey!<br><br>Warm regards,<br>The HKN Team",
+};
 const SESSION_TERMS    = ['Fall','Winter','Spring'];
 
 // ── SESSION ENGINE ───────────────────────────────────────────
@@ -1163,7 +1171,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-16.3';
+const APP_VERSION = 'v2026-08-16.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1174,6 +1182,7 @@ let currentStudentFilter = {};
 let currentSort = { col: 'name', dir: 'asc' }; // directory sort state
 let _emailPreselectIds = []; // student IDs pre-selected from fees tracker (or other sources)
 let _emailPreselectLabel = ''; // describes why, shown in the Send Email banner
+let _emailPreselectTemplate = null; // { subject, body } to auto-fill, one-time use
 
 // Replaces all window._* globals with a single managed state object
 const AppState = {
@@ -4238,6 +4247,7 @@ function emailParentCheckinBucket(label) {
   _emailPreselectLabel = label === 'Never'
     ? 'who have never checked in to the parent portal'
     : `who haven't checked in for ${label}${label.endsWith('+') ? '' : ' days'}`;
+  _emailPreselectTemplate = CHECKIN_REMINDER_TEMPLATE;
   closeModal();
   navigateTo('email');
 }
@@ -5939,6 +5949,14 @@ function renderEmail() {
       <button class="btn btn-ghost btn-sm" onclick="_emailPreselectIds=[];_emailPreselectLabel='';renderEmail();" style="color:var(--orange-dark);font-size:11px;">✕ Clear</button>`;
     const contentArea = document.getElementById('content-area');
     contentArea.insertBefore(banner, contentArea.firstChild);
+  }
+  // Auto-fill subject/body if arriving with a pre-set template (one-time use)
+  if (_emailPreselectTemplate) {
+    const subjEl = document.getElementById('email-subject');
+    const bodyEl = document.getElementById('email-body');
+    if (subjEl) subjEl.value = _emailPreselectTemplate.subject;
+    if (bodyEl) bodyEl.innerHTML = _emailPreselectTemplate.body;
+    _emailPreselectTemplate = null;
   }
   // Default to Active status and current session
   const _eSess = (SessionEngine.getActiveSession() || DB.getSessions().slice(-1)[0])?.name || '';
