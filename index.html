@@ -1169,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.6';
+const APP_VERSION = 'v2026-08-17.7';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1619,7 +1619,7 @@ async function renderDashboard() {
     });
     _classesOverviewRows = Object.values(classMap);
     _classesOverviewSort = { col: 'teacher', dir: 'asc' }; // reset to default each time the Dashboard renders fresh
-    _classesOverviewRows.sort((a,b) => a.teacher.localeCompare(b.teacher) || a.classTime.localeCompare(b.classTime));
+    _classesOverviewRows.sort((a,b) => a.teacher.localeCompare(b.teacher) || _parseClassTimeForSort(a.classTime) - _parseClassTimeForSort(b.classTime));
     return `<div id="classes-overview-container">${_renderClassesOverviewTable()}</div>`;
   })();
 
@@ -4217,6 +4217,20 @@ function _renderClassesOverviewTable() {
     '</tbody></table></div>';
 }
 
+// Parses a time string like "Sat 9:00 AM" into minutes-since-midnight,
+// so classTime sorts chronologically (9:00 before 10:00) rather than
+// alphabetically (where "9:00" > "10:00" as plain text, since '9' > '1').
+function _parseClassTimeForSort(timeStr) {
+  const m = (timeStr || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return 0;
+  let hour = parseInt(m[1], 10);
+  const minute = parseInt(m[2], 10);
+  const isPM = m[3].toUpperCase() === 'PM';
+  if (isPM && hour !== 12) hour += 12;
+  if (!isPM && hour === 12) hour = 0;
+  return hour * 60 + minute;
+}
+
 function sortClassesOverview(col) {
   if (_classesOverviewSort.col === col) {
     _classesOverviewSort.dir = _classesOverviewSort.dir === 'asc' ? 'desc' : 'asc';
@@ -4225,8 +4239,14 @@ function sortClassesOverview(col) {
   }
   const { dir } = _classesOverviewSort;
   _classesOverviewRows.sort((a, b) => {
-    let va = a[col], vb = b[col];
-    if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    let va, vb;
+    if (col === 'classTime') {
+      va = _parseClassTimeForSort(a.classTime);
+      vb = _parseClassTimeForSort(b.classTime);
+    } else {
+      va = a[col]; vb = b[col];
+      if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    }
     if (va < vb) return dir === 'asc' ? -1 : 1;
     if (va > vb) return dir === 'asc' ? 1 : -1;
     return 0;
