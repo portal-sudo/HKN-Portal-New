@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.9';
+const APP_VERSION = 'v2026-08-17.10';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1194,6 +1194,7 @@ const AppState = {
   resetModal() {
     this.modalScores       = {};
     this.pendingAttendance = {};
+    this.pendingHomework   = {};
     this.pendingSave       = null;
   },
   resetImport() {
@@ -2576,6 +2577,33 @@ function openStudentModal(studentId) {
               <span>? = Unmarked</span>
             </div>
           </div>
+          <div style="margin-top:14px;">
+            <label class="form-label">Homework Completed</label>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+              ${sess.classDates.map(date => {
+                const hw = (sd.homeworkDone || {})[date] || 'unknown';
+                const hwColors = { yes:'var(--success)', no:'var(--danger)', unknown:'var(--ink-light)' };
+                const hwLabels = { yes:'Y', no:'N', unknown:'?' };
+                const canMark = isAdmin || teacherCanEdit;
+                return `<div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                  <div style="font-size:10px; color:var(--ink-light);">${date.slice(5)}</div>
+                  ${canMark ? `
+                    <select onchange="setHomeworkDone('${sess.name}','${date}',this.value,this)"
+                      style="width:52px; padding:3px 2px; border-radius:6px; font-size:11px; font-weight:600; border:1.5px solid ${hwColors[hw]}; color:${hwColors[hw]}; background:white; text-align:center; cursor:pointer;">
+                      <option value="unknown" ${hw==='unknown'?'selected':''}>?</option>
+                      <option value="yes"     ${hw==='yes'    ?'selected':''}>Y ✓</option>
+                      <option value="no"      ${hw==='no'     ?'selected':''}>N ✗</option>
+                    </select>` : `
+                    <div style="width:52px; height:28px; border-radius:6px; border:1.5px solid ${hwColors[hw]}; color:${hwColors[hw]}; background:white; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center;">${hwLabels[hw]}</div>`}
+                </div>`;
+              }).join('')}
+            </div>
+            <div style="display:flex; gap:12px; margin-top:8px; font-size:11px; color:var(--ink-light);">
+              <span style="color:var(--success);">Y = Yes</span>
+              <span style="color:var(--danger);">N = No</span>
+              <span>? = Unmarked</span>
+            </div>
+          </div>
         ` : ''}
       </div>
     `;
@@ -3037,6 +3065,19 @@ function saveStudentModal(existingId) {
       }
     });
     AppState.pendingAttendance = {};
+  }
+
+  // Apply any pending homework-completed changes from the modal dropdowns
+  if (AppState.pendingHomework) {
+    Object.entries(AppState.pendingHomework).forEach(([key, val]) => {
+      const [sn, dt] = key.split('|');
+      const sdIdx = updated.sessionData.findIndex(sd => sd.session === sn);
+      if (sdIdx >= 0) {
+        if (!updated.sessionData[sdIdx].homeworkDone) updated.sessionData[sdIdx].homeworkDone = {};
+        updated.sessionData[sdIdx].homeworkDone[dt] = val;
+      }
+    });
+    AppState.pendingHomework = {};
   }
 
   // Issue 3 warning: admin manually set status to Active but current session is incomplete
@@ -6586,6 +6627,14 @@ function setAttendance(sessName, date, val, selectEl) {
   AppState.pendingAttendance[sessName + '|' + date] = val;
   const colors = { present:'var(--success)', absent:'var(--danger)', vacation:'var(--warning)', unmarked:'var(--ink-light)' };
   const c = colors[val] || colors.unmarked;
+  if (selectEl) { selectEl.style.borderColor = c; selectEl.style.color = c; }
+}
+
+function setHomeworkDone(sessName, date, val, selectEl) {
+  AppState.pendingHomework = AppState.pendingHomework || {};
+  AppState.pendingHomework[sessName + '|' + date] = val;
+  const colors = { yes:'var(--success)', no:'var(--danger)', unknown:'var(--ink-light)' };
+  const c = colors[val] || colors.unknown;
   if (selectEl) { selectEl.style.borderColor = c; selectEl.style.color = c; }
 }
 
