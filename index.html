@@ -944,13 +944,16 @@ const DB = {
 
   // SEARCH
   searchStudents({ name='', status='', session='', teacher='', classLevel='' } = {}) {
+    const levelIsArray = Array.isArray(classLevel);
+    const hasLevelFilter = levelIsArray ? classLevel.length > 0 : !!classLevel;
+    const matchesLevel = (sd) => !hasLevelFilter || (levelIsArray ? classLevel.includes(sd.classLevel) : sd.classLevel === classLevel);
     return _cache.students.filter(s => {
       const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
       const parentName = `${s.parentFirstName} ${s.parentLastName}`.toLowerCase();
       const q = name.toLowerCase();
       if (name && !fullName.includes(q) && !parentName.includes(q) && !(s.studentId||'').toLowerCase().includes(q) && !(s.notes||'').toLowerCase().includes(q)) return false;
       if (status && s.status !== status) return false;
-      if (teacher || classLevel || session) {
+      if (teacher || hasLevelFilter || session) {
         const allSessions = this.getSessions().map(s => s.name);
         const sortedSd = (s.sessionData || []).slice().sort((a, b) =>
           allSessions.indexOf(b.session) - allSessions.indexOf(a.session)
@@ -959,12 +962,12 @@ const DB = {
           ? sortedSd.find(sd => {
               if (sd.session !== session) return false;
               if (teacher && sd.teacher !== teacher) return false;
-              if (classLevel && sd.classLevel !== classLevel) return false;
+              if (!matchesLevel(sd)) return false;
               return true;
             })
           : sortedSd.find(sd => {
               if (teacher && sd.teacher !== teacher) return false;
-              if (classLevel && sd.classLevel !== classLevel) return false;
+              if (!matchesLevel(sd)) return false;
               return true;
             });
         if (!se) return false;
@@ -1171,7 +1174,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-16.6';
+const APP_VERSION = 'v2026-08-16.7';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -5825,10 +5828,15 @@ function renderEmail() {
             <option value="">All sessions</option>
             ${sessions.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
           </select>
-          <select class="form-select" id="email-filter-level" onchange="loadEmailRecipients()">
-            <option value="">All levels</option>
-            ${DB.getClassLevels().map(l => `<option value="${l}">${l}</option>`).join('')}
-          </select>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+            <span style="font-size:12px; color:var(--ink-light);">Level:</span>
+            ${DB.getClassLevels().map(l => `
+              <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:4px 10px; border:1px solid var(--olive-mid); border-radius:14px; cursor:pointer; background:var(--white);">
+                <input type="checkbox" class="email-level-cb" value="${escAttr(l)}" onchange="loadEmailRecipients()" style="margin:0;"/>
+                ${escHtml(l)}
+              </label>
+            `).join('')}
+          </div>
           <select class="form-select" id="email-filter-teacher" onchange="loadEmailRecipients()">
             <option value="">All teachers</option>
             ${(isAdmin ? DB.teacherNames() : [currentUser.name]).map(t => `<option value="${t}">${t}</option>`).join('')}
@@ -6005,7 +6013,7 @@ async function preAuthorizeGmail() {
 function loadEmailRecipients() {
   const status     = document.getElementById('email-filter-status')?.value || '';
   const session    = document.getElementById('email-filter-session')?.value || '';
-  const classLevel = document.getElementById('email-filter-level')?.value || '';
+  const classLevel = Array.from(document.querySelectorAll('.email-level-cb:checked')).map(cb => cb.value);
   const teacher    = document.getElementById('email-filter-teacher')?.value || '';
   const isTeacher = currentUser.role === 'teacher';
   let students = DB.searchStudents({ status, session, teacher, classLevel }).filter(s => s.parentEmail);
