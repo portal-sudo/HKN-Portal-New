@@ -1169,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.2';
+const APP_VERSION = 'v2026-08-17.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6004,7 +6004,7 @@ function _renderMultiSelectFilter(fieldId, placeholder, options, defaultSelected
       <button type="button" class="form-select" onclick="event.stopPropagation(); toggleMultiSelectPanel('${fieldId}')"
         style="text-align:left; display:flex; align-items:center; justify-content:space-between; gap:6px; cursor:pointer; min-width:120px;">
         <span id="ms-label-${fieldId}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(label)}</span>
-        <span style="font-size:10px; color:var(--ink-light); flex-shrink:0;">▾</span>
+        <span style="font-size:16px; font-weight:bold; color:var(--ink-mid); flex-shrink:0; line-height:1;">▾</span>
       </button>
       <div id="ms-panel-${fieldId}" class="multi-select-panel" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:white; border:1px solid var(--olive-mid); border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:6px; z-index:50; max-height:220px; overflow-y:auto; min-width:170px;">
         ${options.map(opt => `
