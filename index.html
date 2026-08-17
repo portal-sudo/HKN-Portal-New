@@ -1169,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.7';
+const APP_VERSION = 'v2026-08-17.8';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1445,16 +1445,19 @@ function _startInactivityTimer() {
 
 // ── APP SHELL ────────────────────────────────────────────────
 function loadAppShell(validateTeacher = false) {
-  showScreen('app');
-  document.getElementById('nav-user-email').textContent = currentUser.email;
-  document.getElementById('nav-role-label').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-  buildSidebar();
+  const isViewer = currentUser.role === 'viewer';
+  if (!isViewer) {
+    showScreen('app');
+    document.getElementById('nav-user-email').textContent = currentUser.email;
+    document.getElementById('nav-role-label').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+    buildSidebar();
+  }
   // Seeding runs after SupabaseSync.load() completes — never before,
   // to avoid writing default data to Supabase before the cache is populated.
   SupabaseSync.load().then(() => {
     // Update session badge after cache is populated — getActiveSession() needs _cache.sessions
     const sess = SessionEngine.getActiveSession() || SessionEngine.getCurrentSession();
-    document.getElementById('current-session-badge').textContent = sess?.name || '';
+    if (!isViewer) document.getElementById('current-session-badge').textContent = sess?.name || '';
     seedAttributesIfEmpty();
     seedStudentsIfEmpty();
     migrateNameCasing();
@@ -1488,8 +1491,12 @@ function loadAppShell(validateTeacher = false) {
       currentUser.name = DB.teacherDisplay(teacher);
       document.getElementById('nav-user-email').textContent = currentUser.email;
     }
-    navigateTo(currentUser.role === 'teacher' ? 'attendance' : 'dashboard');
-    _startInactivityTimer();
+    if (isViewer) {
+      loadViewerScreen();
+    } else {
+      navigateTo(currentUser.role === 'teacher' ? 'attendance' : 'dashboard');
+      _startInactivityTimer();
+    }
   });
 }
 
