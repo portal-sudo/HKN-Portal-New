@@ -944,32 +944,27 @@ const DB = {
 
   // SEARCH
   searchStudents({ name='', status='', session='', teacher='', classLevel='' } = {}) {
-    const levelIsArray = Array.isArray(classLevel);
-    const hasLevelFilter = levelIsArray ? classLevel.length > 0 : !!classLevel;
-    const matchesLevel = (sd) => !hasLevelFilter || (levelIsArray ? classLevel.includes(sd.classLevel) : sd.classLevel === classLevel);
+    const matchesMulti = (val, filterVal) => Array.isArray(filterVal) ? (filterVal.length === 0 || filterVal.includes(val)) : (!filterVal || val === filterVal);
+    const hasSessionFilter = Array.isArray(session) ? session.length > 0 : !!session;
+    const hasTeacherFilter = Array.isArray(teacher) ? teacher.length > 0 : !!teacher;
+    const hasLevelFilter   = Array.isArray(classLevel) ? classLevel.length > 0 : !!classLevel;
     return _cache.students.filter(s => {
       const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
       const parentName = `${s.parentFirstName} ${s.parentLastName}`.toLowerCase();
       const q = name.toLowerCase();
       if (name && !fullName.includes(q) && !parentName.includes(q) && !(s.studentId||'').toLowerCase().includes(q) && !(s.notes||'').toLowerCase().includes(q)) return false;
       if (status && s.status !== status) return false;
-      if (teacher || hasLevelFilter || session) {
+      if (hasTeacherFilter || hasLevelFilter || hasSessionFilter) {
         const allSessions = this.getSessions().map(s => s.name);
         const sortedSd = (s.sessionData || []).slice().sort((a, b) =>
           allSessions.indexOf(b.session) - allSessions.indexOf(a.session)
         );
-        const se = session
-          ? sortedSd.find(sd => {
-              if (sd.session !== session) return false;
-              if (teacher && sd.teacher !== teacher) return false;
-              if (!matchesLevel(sd)) return false;
-              return true;
-            })
-          : sortedSd.find(sd => {
-              if (teacher && sd.teacher !== teacher) return false;
-              if (!matchesLevel(sd)) return false;
-              return true;
-            });
+        const se = sortedSd.find(sd => {
+          if (hasSessionFilter && !matchesMulti(sd.session, session)) return false;
+          if (hasTeacherFilter && !matchesMulti(sd.teacher, teacher)) return false;
+          if (hasLevelFilter && !matchesMulti(sd.classLevel, classLevel)) return false;
+          return true;
+        });
         if (!se) return false;
       }
       return true;
@@ -1174,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.1';
+const APP_VERSION = 'v2026-08-17.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -5803,6 +5798,7 @@ function renderEmail() {
   const sessions    = DB.getSessions();
   const isAdmin     = currentUser.role === 'admin';
   const isTeacher   = currentUser.role === 'teacher';
+  const activeSessName = (SessionEngine.getActiveSession() || sessions.slice(-1)[0])?.name || '';
   const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{fees}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{teacher}}'];
   const settings    = DB.getSettings();
   const templates   = DB.getTemplates();
@@ -5824,17 +5820,9 @@ function renderEmail() {
             <option value="">All statuses</option>
             ${STUDENT_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
           </select>
-          <select class="form-select" id="email-filter-session" onchange="loadEmailRecipients()">
-            <option value="">All sessions</option>
-            ${sessions.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-          </select>
-          <select class="form-select" id="email-filter-level" onchange="loadEmailRecipients()" multiple size="4" title="Ctrl/Cmd-click to select multiple levels" style="min-width:120px; padding:4px;">
-            ${DB.getClassLevels().map(l => `<option value="${escAttr(l)}">${escHtml(l)}</option>`).join('')}
-          </select>
-          <select class="form-select" id="email-filter-teacher" onchange="loadEmailRecipients()">
-            <option value="">All teachers</option>
-            ${(isAdmin ? DB.teacherNames() : [currentUser.name]).map(t => `<option value="${t}">${t}</option>`).join('')}
-          </select>
+          ${_renderMultiSelectFilter('session', 'All sessions', sessions.map(s => s.name), [activeSessName])}
+          ${_renderMultiSelectFilter('level', 'All levels', DB.getClassLevels(), [])}
+          ${_renderMultiSelectFilter('teacher', 'All teachers', isAdmin ? DB.teacherNames() : [currentUser.name], [])}
         </div>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
           <button class="btn btn-ghost btn-sm" onclick="toggleAllRecipients(true)">Select all</button>
@@ -5960,12 +5948,10 @@ function renderEmail() {
     if (bodyEl) bodyEl.innerHTML = _emailPreselectTemplate.body;
     _emailPreselectTemplate = null;
   }
-  // Default to Active status and current session
-  const _eSess = (SessionEngine.getActiveSession() || DB.getSessions().slice(-1)[0])?.name || '';
+  // Default to Active status (session default is already baked into the
+  // multi-select component's initial render, above)
   const _eStat = document.getElementById('email-filter-status');
-  const _eSession = document.getElementById('email-filter-session');
   if (_eStat && !_emailPreselectIds.length) _eStat.value = 'Active';
-  if (_eSession && _eSess) _eSession.value = _eSess;
   loadEmailRecipients();
   updateGmailAuthStatus();
 }
@@ -6004,11 +5990,69 @@ async function preAuthorizeGmail() {
   }
 }
 
+// ── CUSTOM MULTI-SELECT DROPDOWN ─────────────────────────────
+// Looks like the app's normal sleek single-line selects when closed;
+// opens a small checklist panel on click. Closed-box label shows the
+// one selected name if exactly 1 is picked, otherwise a placeholder
+// (0 selected) or "N selected" (2+) — matches the space a single
+// select box actually has room for.
+function _renderMultiSelectFilter(fieldId, placeholder, options, defaultSelected) {
+  const selected = defaultSelected || [];
+  const label = selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} selected`;
+  return `
+    <div class="multi-select-wrap" style="position:relative; display:inline-block;">
+      <button type="button" class="form-select" onclick="event.stopPropagation(); toggleMultiSelectPanel('${fieldId}')"
+        style="text-align:left; display:flex; align-items:center; justify-content:space-between; gap:6px; cursor:pointer; min-width:120px;">
+        <span id="ms-label-${fieldId}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(label)}</span>
+        <span style="font-size:10px; color:var(--ink-light); flex-shrink:0;">▾</span>
+      </button>
+      <div id="ms-panel-${fieldId}" class="multi-select-panel" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:white; border:1px solid var(--olive-mid); border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:6px; z-index:50; max-height:220px; overflow-y:auto; min-width:170px;">
+        ${options.map(opt => `
+          <label style="display:flex; align-items:center; gap:6px; padding:4px 6px; font-size:13px; cursor:pointer; white-space:nowrap; border-radius:4px;"
+            onmouseover="this.style.background='var(--olive-pale)'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" value="${escAttr(opt)}" ${selected.includes(opt) ? 'checked' : ''}
+              onchange="onMultiSelectChange('${fieldId}','${escAttr(placeholder)}')" style="margin:0;"/>
+            ${escHtml(opt)}
+          </label>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function toggleMultiSelectPanel(fieldId) {
+  document.querySelectorAll('.multi-select-panel').forEach(p => {
+    if (p.id !== 'ms-panel-' + fieldId) p.style.display = 'none';
+  });
+  const panel = document.getElementById('ms-panel-' + fieldId);
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function _getMultiSelectValues(fieldId) {
+  const panel = document.getElementById('ms-panel-' + fieldId);
+  if (!panel) return [];
+  return Array.from(panel.querySelectorAll('input:checked')).map(cb => cb.value);
+}
+
+function onMultiSelectChange(fieldId, placeholder) {
+  const values = _getMultiSelectValues(fieldId);
+  const label = values.length === 0 ? placeholder : values.length === 1 ? values[0] : `${values.length} selected`;
+  const labelEl = document.getElementById('ms-label-' + fieldId);
+  if (labelEl) labelEl.textContent = label;
+  loadEmailRecipients();
+}
+
+// Close any open panel when clicking anywhere outside one
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.multi-select-wrap')) {
+    document.querySelectorAll('.multi-select-panel').forEach(p => p.style.display = 'none');
+  }
+});
+
 function loadEmailRecipients() {
   const status     = document.getElementById('email-filter-status')?.value || '';
-  const session    = document.getElementById('email-filter-session')?.value || '';
-  const classLevel = Array.from(document.getElementById('email-filter-level')?.selectedOptions || []).map(o => o.value);
-  const teacher    = document.getElementById('email-filter-teacher')?.value || '';
+  const session    = _getMultiSelectValues('session');
+  const classLevel = _getMultiSelectValues('level');
+  const teacher    = _getMultiSelectValues('teacher');
   const isTeacher = currentUser.role === 'teacher';
   let students = DB.searchStudents({ status, session, teacher, classLevel }).filter(s => s.parentEmail);
   // If arriving from fees tracker, pre-filter to selected students only
@@ -6017,15 +6061,13 @@ function loadEmailRecipients() {
   }
   // Teachers only see parents of their own students in the selected (or active) session
   if (isTeacher) {
-    const filterSess = session || SessionEngine.getActiveSession()?.name || '';
+    const filterSessions = session.length > 0 ? session : [SessionEngine.getActiveSession()?.name || ''];
     const tName  = (currentUser.name  || '').toLowerCase();
     const tEmail = (currentUser.email || '').toLowerCase();
     const tPrefix = tEmail.split('@')[0];
     students = students.filter(s => {
-      // Find the session entry for the relevant session
-      const sd = filterSess
-        ? (s.sessionData || []).find(d => d.session === filterSess)
-        : (s.sessionData || [])[0];
+      // Find a session entry matching any of the relevant sessions
+      const sd = (s.sessionData || []).find(d => filterSessions.includes(d.session)) || (s.sessionData || [])[0];
       if (!sd) return false;
       const teacherFieldLc = (sd.teacher || '').toLowerCase();
       return teacherFieldLc.includes(tName) ||
