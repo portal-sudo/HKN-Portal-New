@@ -1169,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.3';
+const APP_VERSION = 'v2026-08-17.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -5816,7 +5816,8 @@ function renderEmail() {
       <div class="card">
         <div class="card-title">Recipients</div>
         <div class="filter-bar" style="margin-bottom:12px;">
-          <select class="form-select" id="email-filter-status" onchange="_emailPreselectIds=[];loadEmailRecipients()">
+          <select class="form-select" id="email-filter-status" onchange="_emailPreselectIds=[];loadEmailRecipients()"
+            style="appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath d=%22M2.5 4.5L6 8L9.5 4.5%22 stroke=%22%235A5A40%22 stroke-width=%221.8%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E'); background-repeat:no-repeat; background-position:right 10px center; padding-right:28px;">
             <option value="">All statuses</option>
             ${STUDENT_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
           </select>
@@ -6004,7 +6005,7 @@ function _renderMultiSelectFilter(fieldId, placeholder, options, defaultSelected
       <button type="button" class="form-select" onclick="event.stopPropagation(); toggleMultiSelectPanel('${fieldId}')"
         style="text-align:left; display:flex; align-items:center; justify-content:space-between; gap:6px; cursor:pointer; min-width:120px;">
         <span id="ms-label-${fieldId}" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(label)}</span>
-        <span style="font-size:16px; font-weight:bold; color:var(--ink-mid); flex-shrink:0; line-height:1;">▾</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" style="flex-shrink:0;"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="var(--ink-mid)" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div id="ms-panel-${fieldId}" class="multi-select-panel" style="display:none; position:absolute; top:100%; left:0; margin-top:2px; background:white; border:1px solid var(--olive-mid); border-radius:var(--radius-md); box-shadow:0 4px 12px rgba(0,0,0,0.12); padding:6px; z-index:50; max-height:220px; overflow-y:auto; min-width:170px;">
         ${options.map(opt => `
