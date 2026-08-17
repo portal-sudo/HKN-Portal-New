@@ -1169,7 +1169,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.5';
+const APP_VERSION = 'v2026-08-17.6';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1385,6 +1385,8 @@ function backToLogin() {
 // even without an auto-logout timer.
 let _presenceHeartbeatTimer = null;
 let _parentCheckinBuckets = {}; // set by renderDashboard's chart, read by showParentCheckinBucket
+let _classesOverviewRows = []; // set by renderDashboard, resorted in place by sortClassesOverview
+let _classesOverviewSort = { col: 'teacher', dir: 'asc' };
 
 async function _updatePresence() {
   if (!currentUser) return;
@@ -1615,11 +1617,10 @@ async function renderDashboard() {
       if (!classMap[key]) classMap[key] = { teacher: sd.teacher, classLevel: sd.classLevel || '—', classTime: sd.classTime || '—', count: 0 };
       classMap[key].count++;
     });
-    const rows = Object.values(classMap).sort((a,b) => a.teacher.localeCompare(b.teacher) || a.classTime.localeCompare(b.classTime));
-    if (!rows.length) return '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No active classes for this session.</div>';
-    return '<div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Class Level</th><th>Class Time</th><th style="text-align:center;">Students</th></tr></thead><tbody>' +
-      rows.map(r => '<tr><td style="font-weight:500;">' + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
-      '</tbody></table></div>';
+    _classesOverviewRows = Object.values(classMap);
+    _classesOverviewSort = { col: 'teacher', dir: 'asc' }; // reset to default each time the Dashboard renders fresh
+    _classesOverviewRows.sort((a,b) => a.teacher.localeCompare(b.teacher) || a.classTime.localeCompare(b.classTime));
+    return `<div id="classes-overview-container">${_renderClassesOverviewTable()}</div>`;
   })();
 
   const html = `
@@ -1669,10 +1670,12 @@ async function renderDashboard() {
         const neverList = [];
 
         students.forEach(s => {
+          const activeSd = (s.sessionData || []).find(d => d.session === activeSess?.name);
           const entry = {
             id: s.id,
             studentName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
             parentName: `${s.parentFirstName || ''} ${s.parentLastName || ''}`.trim() || '—',
+            teacherName: activeSd?.teacher || '—',
           };
           if (!s.lastParentAccess) { neverList.push(entry); return; }
           const lastVisit = new Date(s.lastParentAccess); lastVisit.setHours(0,0,0,0);
@@ -4200,6 +4203,38 @@ const PRESENCE_ACTIVE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 
 // ── STUDENT PHOTOS ────────────────────────────────────────────
 // ── PARENT CHECK-IN CHART DRILL-DOWN ─────────────────────────────
+// ── CLASSES OVERVIEW (Dashboard) — sortable columns ─────────────
+function _renderClassesOverviewTable() {
+  const rows = _classesOverviewRows;
+  if (!rows.length) return '<div style="font-size:13px;color:var(--ink-light);padding:8px 0;">No active classes for this session.</div>';
+  const { col, dir } = _classesOverviewSort;
+  const arrow = (c) => col === c ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const th = (c, label, align) => `<th onclick="sortClassesOverview('${c}')" style="cursor:pointer; user-select:none;${align ? ' text-align:'+align+';' : ''}">${escHtml(label)}${arrow(c)}</th>`;
+  return '<div class="table-wrap"><table><thead><tr>' +
+    th('teacher', 'Teacher') + th('classLevel', 'Class Level') + th('classTime', 'Class Time') + th('count', 'Students', 'center') +
+    '</tr></thead><tbody>' +
+    rows.map(r => '<tr><td style="font-weight:500;">' + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+function sortClassesOverview(col) {
+  if (_classesOverviewSort.col === col) {
+    _classesOverviewSort.dir = _classesOverviewSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _classesOverviewSort = { col, dir: 'asc' };
+  }
+  const { dir } = _classesOverviewSort;
+  _classesOverviewRows.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  const container = document.getElementById('classes-overview-container');
+  if (container) container.innerHTML = _renderClassesOverviewTable();
+}
+
 function showParentCheckinBucket(label) {
   const list = _parentCheckinBuckets[label] || [];
   const dayDesc = label === 'Never' ? 'have never checked in'
@@ -4220,9 +4255,12 @@ function showParentCheckinBucket(label) {
         ${list.length ? `
           <div style="display:flex; flex-direction:column; gap:2px;">
             ${list.map(entry => `
-              <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--cream-dark); font-size:13px;">
-                <span style="font-weight:500;">${escHtml(entry.studentName)}</span>
-                <span style="color:var(--ink-light);">${escHtml(entry.parentName)}</span>
+              <div style="padding:6px 0; border-bottom:1px solid var(--cream-dark);">
+                <div style="display:flex; justify-content:space-between; font-size:13px;">
+                  <span style="font-weight:500;">${escHtml(entry.studentName)}</span>
+                  <span style="color:var(--ink-light);">${escHtml(entry.parentName)}</span>
+                </div>
+                <div style="font-size:11px; color:var(--ink-light); margin-top:2px;">Teacher: ${escHtml(entry.teacherName)}</div>
               </div>
             `).join('')}
           </div>
