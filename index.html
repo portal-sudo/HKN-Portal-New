@@ -572,7 +572,6 @@ tbody tr { transition: background var(--transition); }
       <div class="page-subtitle">Read-only overview — use filters to explore</div>
     </div>
     <div id="viewer-motd-banner"></div>
-    <div class="stat-grid" id="viewer-stat-grid"></div>
     <div class="filter-bar">
       <input type="text" class="form-input" id="viewer-search" placeholder="🔍  Search by name…" oninput="renderViewerTable()" style="max-width:240px;"/>
       <select class="form-select" id="viewer-filter-session" onchange="renderViewerTable()">
@@ -1169,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.8';
+const APP_VERSION = 'v2026-08-17.9';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6908,13 +6907,14 @@ function loadViewerScreen() {
 }
 
 function renderViewerStats() {
+  const grid = document.getElementById('viewer-stat-grid');
+  if (!grid) return; // stat cards removed from the Viewer screen
   const session = document.getElementById('viewer-filter-session')?.value || '';
   const status  = document.getElementById('viewer-filter-status')?.value || '';
   const teacher = document.getElementById('viewer-filter-teacher')?.value || '';
   const classLevel = document.getElementById('viewer-filter-level')?.value || '';
   const counts  = DB.getStatusCounts({ session, status: '', teacher, classLevel });
 
-  const grid = document.getElementById('viewer-stat-grid');
   grid.innerHTML = STUDENT_STATUSES.concat(['Total']).map(s => `
     <div class="stat-card ${status === s ? 'active' : ''}" onclick="viewerFilterStatus('${s}')">
       <div class="stat-number">${counts[s] || 0}</div>
