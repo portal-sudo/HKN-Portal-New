@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.10';
+const APP_VERSION = 'v2026-08-17.11';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6690,7 +6690,7 @@ function renderAttendance() {
       <button class="btn btn-success btn-sm" onclick="markAllAttendance('present')">✓ All present</button>
       <button class="btn btn-danger btn-sm" onclick="markAllAttendance('absent')">✗ All absent</button>
       <div style="flex:1;"></div>
-      <button class="btn btn-primary" onclick="saveAttendanceBatch()">💾 Save attendance</button>
+      <button class="btn btn-primary" onclick="saveAttendanceBatch()">💾 Save All</button>
     </div>
 
     <div id="att-table-area">
@@ -6791,11 +6791,13 @@ function loadAttendanceClass() {
   const rows = students.map(s => {
     const sd  = (s.sessionData || []).find(d => d.session === sessName) || {};
     const att = (sd.attendance || {})[date] || 'unmarked';
+    const hw  = (sd.homeworkDone || {})[date] || 'unknown';
     // Teacher can only mark attendance for their own students
     const isOwn = !isTeacherRole || (sd.teacher || '').toLowerCase().includes(
       (currentUser.name || '').split(' ')[0].toLowerCase()
     );
     const attLabel = { present: '✓ Present', absent: '✗ Absent', vacation: '~ Vacation', unmarked: '— Unmarked' };
+    const hwLabel = { yes: '✓ Yes', no: '✗ No', unknown: '— Unmarked' };
     return `
       <tr id="att-row-${s.id}" style="${!isOwn ? 'opacity:0.6;' : ''}">
         <td style="font-weight:500;">
@@ -6828,6 +6830,22 @@ function loadAttendanceClass() {
                 border-color:var(--warning);">~ Vacation</button>
           </div>` : `<span style="font-size:12px; color:var(--ink-light);">${attLabel[att] || att}</span>`}
         </td>
+        <td>
+          ${isOwn ? `<div style="display:flex; gap:6px;">
+            <button onclick="setHwBatch('${s.id}','${sessName}','${date}','yes')"
+              class="hw-btn" data-student="${s.id}" data-val="yes"
+              style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600; border:1.5px solid; cursor:pointer;
+                background:${hw==='yes'?'var(--success)':'white'};
+                color:${hw==='yes'?'white':'var(--success)'};
+                border-color:var(--success);">✓ Yes</button>
+            <button onclick="setHwBatch('${s.id}','${sessName}','${date}','no')"
+              class="hw-btn" data-student="${s.id}" data-val="no"
+              style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600; border:1.5px solid; cursor:pointer;
+                background:${hw==='no'?'var(--danger)':'white'};
+                color:${hw==='no'?'white':'var(--danger)'};
+                border-color:var(--danger);">✗ No</button>
+          </div>` : `<span style="font-size:12px; color:var(--ink-light);">${hwLabel[hw] || hw}</span>`}
+        </td>
       </tr>`;
   }).join('');
 
@@ -6838,7 +6856,7 @@ function loadAttendanceClass() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Student</th><th>Teacher</th><th>Attendance</th></tr></thead>
+          <thead><tr><th>Student</th><th>Teacher</th><th>Attendance</th><th>Homework</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -6846,10 +6864,13 @@ function loadAttendanceClass() {
 
   // Store current batch state
   AppState.attBatch = {};
+  AppState.hwBatch = {};
   students.forEach(s => {
     const sd  = (s.sessionData || []).find(d => d.session === sessName) || {};
     const att = (sd.attendance || {})[date] || 'unmarked';
+    const hw  = (sd.homeworkDone || {})[date] || 'unknown';
     AppState.attBatch[s.id] = att;
+    AppState.hwBatch[s.id] = hw;
   });
 }
 
@@ -6860,6 +6881,20 @@ function setAttBatch(studentId, sessName, date, value) {
   // Update button styles for this student's row
   const colorMap = { present:'var(--success)', absent:'var(--danger)', vacation:'var(--warning)' };
   document.querySelectorAll(`[data-student="${studentId}"].att-btn`).forEach(btn => {
+    const val = btn.getAttribute('data-val');
+    const active = val === value;
+    btn.style.background = active ? colorMap[val] : 'white';
+    btn.style.color = active ? 'white' : colorMap[val];
+  });
+}
+
+function setHwBatch(studentId, sessName, date, value) {
+  AppState.hwBatch = AppState.hwBatch || {};
+  AppState.hwBatch[studentId] = value;
+
+  // Update button styles for this student's row
+  const colorMap = { yes:'var(--success)', no:'var(--danger)' };
+  document.querySelectorAll(`[data-student="${studentId}"].hw-btn`).forEach(btn => {
     const val = btn.getAttribute('data-val');
     const active = val === value;
     btn.style.background = active ? colorMap[val] : 'white';
@@ -6888,23 +6923,38 @@ function saveAttendanceBatch() {
   const today = new Date().toISOString().slice(0,10);
   if (date > today) { showToast('Cannot mark attendance for future dates', 'error'); return; }
 
+  const studentIds = new Set([
+    ...Object.keys(AppState.attBatch || {}),
+    ...Object.keys(AppState.hwBatch || {}),
+  ]);
+
   let saved = 0;
-  Object.entries(AppState.attBatch).forEach(([studentId, value]) => {
+  studentIds.forEach(studentId => {
     const student = DB.getStudent(studentId);
     if (!student) return;
     const sdIdx = (student.sessionData || []).findIndex(sd => sd.session === sessName);
     if (sdIdx < 0) return;
-    if (!student.sessionData[sdIdx].attendance) student.sessionData[sdIdx].attendance = {};
-    student.sessionData[sdIdx].attendance[date] = value;
+
+    const attValue = AppState.attBatch?.[studentId];
+    if (attValue !== undefined) {
+      if (!student.sessionData[sdIdx].attendance) student.sessionData[sdIdx].attendance = {};
+      student.sessionData[sdIdx].attendance[date] = attValue;
+    }
+    const hwValue = AppState.hwBatch?.[studentId];
+    if (hwValue !== undefined) {
+      if (!student.sessionData[sdIdx].homeworkDone) student.sessionData[sdIdx].homeworkDone = {};
+      student.sessionData[sdIdx].homeworkDone[date] = hwValue;
+    }
+
     DB.saveStudent(student);
     saved++;
   });
 
-  showToast(`Attendance saved for ${saved} student${saved!==1?'s':''} on ${date}`, 'success');
+  showToast(`Saved for ${saved} student${saved!==1?'s':''} on ${date}`, 'success');
 
   // Flash the save button
   const btn = document.querySelector('[onclick="saveAttendanceBatch()"]');
-  if (btn) { btn.textContent = '✅ Saved!'; setTimeout(() => btn.textContent = '💾 Save attendance', 2000); }
+  if (btn) { btn.textContent = '✅ Saved!'; setTimeout(() => btn.textContent = '💾 Save All', 2000); }
 }
 
 // ── VIEWER SCREEN ─────────────────────────────────────────────
