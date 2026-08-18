@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-17.11';
+const APP_VERSION = 'v2026-08-18.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2643,6 +2643,10 @@ function openStudentModal(studentId) {
         <button class="modal-close" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body">
+        <details style="margin-bottom:20px;">
+          <summary style="cursor:pointer; font-size:13px; color:var(--olive); font-weight:700; padding:10px 0; user-select:none; text-transform:uppercase; letter-spacing:0.06em;">
+            ▸ Bio-data
+          </summary>
         <!-- BIO INFO -->
         <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:14px 18px; margin-bottom:20px;">
           <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">Student information</div>
@@ -2782,6 +2786,7 @@ function openStudentModal(studentId) {
             : ''
           }
         </div>
+        </details>
 
         <!-- SESSION DATA TABS -->
         <div>
