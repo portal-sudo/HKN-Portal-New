@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-21.1';
+const APP_VERSION = 'v2026-08-21.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6307,6 +6307,7 @@ async function sendEmailGmail() {
 
   // Send loop
   let sent = 0, failed = 0;
+  const sentToEmails = [];
   for (let i = 0; i < students.length; i++) {
     const s = students[i];
     const pct = Math.round(((i) / students.length) * 100);
@@ -6320,6 +6321,7 @@ async function sendEmailGmail() {
     try {
       await GMAIL.sendOne({ to: s.parentEmail, subject: resolvedSubject, body: resolvedBody });
       sent++;
+      sentToEmails.push(s.parentEmail);
       log.innerHTML += `<div style="color:var(--success);">✓ ${escHtml(s.parentEmail)}</div>`;
     } catch (e) {
       failed++;
@@ -6359,6 +6361,30 @@ async function sendEmailGmail() {
       showToast('Teacher copy failed', 'error');
     }
     if (progLabel) progLabel.textContent = `Done — ${sent} sent${failed > 0 ? `, ${failed} failed` : ''}`;
+  }
+
+  // Audit copy — always sent, regardless of role or whether a teacher
+  // copy was also requested, so info@ has a complete log of every
+  // email sent through the portal.
+  {
+    const recipientList = sentToEmails.length > 0 ? sentToEmails.join(', ') : '(none — all sends failed)';
+    const teacherCopyLine = teacherEmails.length > 0
+      ? `\nAlso copied to teachers: ${teacherEmails.join(', ')}`
+      : '';
+    const auditBody =
+      `Sent by: ${currentUser.email}\n` +
+      `Sent to (${sentToEmails.length}): ${recipientList}${teacherCopyLine}\n\n` +
+      `[Merge fields shown as-is below]\n\n` +
+      body;
+    try {
+      await GMAIL.sendOne({
+        to: 'info@hindikineev.org',
+        subject: `From Portal: ${subject}`,
+        body: auditBody
+      });
+    } catch(e) {
+      console.warn('Audit copy to info@ failed:', e.message);
+    }
   }
 
   // WhatsApp: if checkbox is ticked, open WhatsApp for each recipient with phone number
