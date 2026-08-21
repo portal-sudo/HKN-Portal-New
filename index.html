@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-20.1';
+const APP_VERSION = 'v2026-08-21.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -3581,6 +3581,12 @@ function renderClasses() {
   const sessions  = DB.getSessions();
   const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
 
+  // Pre-select Teacher/Class Level if arriving from a Dashboard row click
+  // (one-time use — cleared immediately so it doesn't stick on later visits)
+  const presetTeacher = _classesPageFilter?.teacher || '';
+  const presetLevel   = _classesPageFilter?.classLevel || '';
+  _classesPageFilter = null;
+
   // Build the page shell with session, teacher, and class level selectors
   const html = `
     <div class="page-header">
@@ -3594,11 +3600,11 @@ function renderClasses() {
       </select>
       <select class="form-select" id="classes-filter-teacher" onchange="renderClassCards()" style="max-width:200px;">
         <option value="">All teachers</option>
-        ${DB.teacherNames().map(t => `<option value="${t}">${t}</option>`).join('')}
+        ${DB.teacherNames().map(t => `<option value="${t}" ${t === presetTeacher ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
       <select class="form-select" id="classes-filter-level" onchange="renderClassCards()" style="max-width:200px;">
         <option value="">All levels</option>
-        ${DB.getClassLevels().map(l => `<option value="${l}">${l}</option>`).join('')}
+        ${DB.getClassLevels().map(l => `<option value="${l}" ${l === presetLevel ? 'selected' : ''}>${l}</option>`).join('')}
       </select>
     </div>
     <div id="classes-card-area"></div>
@@ -4265,8 +4271,17 @@ function _renderClassesOverviewTable() {
   return '<div class="table-wrap"><table><thead><tr>' +
     th('teacher', 'Teacher') + th('classLevel', 'Class Level') + th('classTime', 'Class Time') + th('count', 'Students', 'center') +
     '</tr></thead><tbody>' +
-    rows.map(r => '<tr><td style="font-weight:500;">' + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
+    rows.map(r => `<tr style="cursor:pointer;" onclick="goToClassFromOverview('${escAttr(r.teacher)}','${escAttr(r.classLevel)}')" onmouseover="this.style.background='var(--olive-pale)'" onmouseout="this.style.background=''"><td style="font-weight:500;">` + escHtml(r.teacher) + '</td><td>' + escHtml(r.classLevel) + '</td><td>' + escHtml(r.classTime) + '</td><td style="text-align:center;"><span class="badge badge-active">' + r.count + '</span></td></tr>').join('') +
     '</tbody></table></div>';
+}
+
+// Set by clicking a row in the Dashboard's Classes Overview table, read
+// once by renderClasses() to pre-select Teacher/Class Level, then cleared.
+let _classesPageFilter = null;
+
+function goToClassFromOverview(teacher, classLevel) {
+  _classesPageFilter = { teacher, classLevel };
+  navigateTo('classes');
 }
 
 // Parses a time string like "Sat 9:00 AM" into minutes-since-midnight,
