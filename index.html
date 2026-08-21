@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-21.2';
+const APP_VERSION = 'v2026-08-21.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6346,7 +6346,7 @@ async function sendEmailGmail() {
   const teacherEmails = [...document.querySelectorAll('.teacher-copy-cb:checked')].map(cb => cb.value).filter(Boolean);
   if (teacherEmails.length > 0) {
     if (progLabel) progLabel.textContent = 'Sending teacher copy…';
-    const teacherNote = `[This is a copy of the email sent to ${sent} parent${sent !== 1 ? 's' : ''}. Merge fields are shown as-is.]\n\n`;
+    const teacherNote = `[This is a copy of the email sent to ${sent} parent${sent !== 1 ? 's' : ''}. Merge fields are shown as-is.]<br><br>`;
     try {
       await GMAIL.sendOne({
         to: teacherEmails.join(', '),
@@ -6369,12 +6369,12 @@ async function sendEmailGmail() {
   {
     const recipientList = sentToEmails.length > 0 ? sentToEmails.join(', ') : '(none — all sends failed)';
     const teacherCopyLine = teacherEmails.length > 0
-      ? `\nAlso copied to teachers: ${teacherEmails.join(', ')}`
+      ? `<br>Also copied to teachers: ${teacherEmails.join(', ')}`
       : '';
     const auditBody =
-      `Sent by: ${currentUser.email}\n` +
-      `Sent to (${sentToEmails.length}): ${recipientList}${teacherCopyLine}\n\n` +
-      `[Merge fields shown as-is below]\n\n` +
+      `Sent by: ${currentUser.email}<br>` +
+      `Sent to (${sentToEmails.length}): ${recipientList}${teacherCopyLine}<br><br>` +
+      `[Merge fields shown as-is below]<br><br>` +
       body;
     try {
       await GMAIL.sendOne({
