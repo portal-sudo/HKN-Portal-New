@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-21.4';
+const APP_VERSION = 'v2026-08-23.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1507,7 +1507,6 @@ function buildSidebar() {
     { id:'dashboard', icon:'📊', label:'Dashboard' },
     { id:'directory', icon:'👥', label:'Student directory' },
     { section: 'Students' },
-    ...(isAdmin ? [{ id:'add-student', icon:'➕', label:'Add student' }] : []),
     ...(!isMobile ? [{ id:'email', icon:'✉️', label:'Send email' }, { id:'templates', icon:'📋', label:'Email templates' }] : []),
     { section: 'School' },
     ...(currentUser.role === 'teacher' ? [{ id:'attendance', icon:'📝', label:'Mark attendance' }] : []),
@@ -1515,12 +1514,8 @@ function buildSidebar() {
     { id:'sessions', icon:'📅', label:'Sessions' },
     { id:'classes',  icon:'🏫', label:'Classes' },
     { id:'scoring-guide', icon:'📖', label:'Scoring guide' },
-    ...(isAdmin ? [{ id:'fees', icon:'💰', label:'Fees tracker' }] : []),
-    ...(isAdmin ? [{ id:'inventory', icon:'📚', label:'Book inventory' }] : []),
     ...(isAdmin ? [
-      { id:'attributes', icon:'⚙️', label:'School attributes' },
-      { section: 'System' },
-      { id:'backup',  icon:'💾', label:'Backup & restore' },
+      { id:'attributes', icon:'⚙️', label:'Settings', children: ATTR_TABS },
     ] : []),
   ];
 
@@ -1530,6 +1525,17 @@ function buildSidebar() {
   items.forEach(item => {
     if (item.section) {
       html += `<span class="sidebar-section-label">${item.section}</span>`;
+    } else if (item.children) {
+      html += `<button class="sidebar-item" id="nav-${item.id}" onclick="toggleSettingsMenu()" style="display:flex; align-items:center;">
+        <span class="sidebar-icon">${item.icon}</span>${item.label}
+        <span id="settings-menu-arrow" style="margin-left:auto; font-size:10px; transition:transform 0.15s;">▸</span>
+      </button>
+      <div id="settings-submenu" style="display:none; padding-left:14px;">
+        ${item.children.map(sub => `
+          <button class="sidebar-item sidebar-subitem" style="font-size:13px; padding:8px 12px;" onclick="navigateAttr('${sub.id}')">
+            <span class="sidebar-icon">${sub.icon}</span>${sub.label}
+          </button>`).join('')}
+      </div>`;
     } else {
       html += `<button class="sidebar-item" id="nav-${item.id}" onclick="navigateTo('${item.id}')">
         <span class="sidebar-icon">${item.icon}</span>${item.label}
@@ -1537,6 +1543,15 @@ function buildSidebar() {
     }
   });
   nav.innerHTML = html;
+}
+
+function toggleSettingsMenu() {
+  const menu = document.getElementById('settings-submenu');
+  const arrow = document.getElementById('settings-menu-arrow');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 function navigateTo(page) {
@@ -1555,13 +1570,10 @@ function navigateTo(page) {
     sessions:    renderSessions,
     classes:     renderClasses,
     'scoring-guide': renderScoringGuide,
-    attributes:  () => navigateAttr(_currentAttrTab),
-    backup:      renderBackup,
+    attributes:  renderAttributesChooser,
     email:       renderEmail,
     templates:   renderTemplates,
     attendance:  renderAttendance,
-    fees:        renderFees,
-    inventory:   renderInventory,
   };
   const fn = pages[page];
   if (fn) fn();
@@ -2714,7 +2726,7 @@ function openStudentModal(studentId) {
           </div>
           <div class="form-row" style="margin-bottom:12px;">
             ${fld('parentEmail', 'Email', isAdmin ? inputField('parentEmail', s.parentEmail, 'email') : readonlyField(s.parentEmail))}
-            ${fld('phone',       'Phone', isAdmin ? inputField('phone',       s.phone,       'tel')   : readonlyField(s.phone))}
+            ${fld('phone',       'Phone', isAdmin ? inputField('phone',       formatPhone(s.phone),       'tel')   : readonlyField(formatPhone(s.phone)))}
           </div>
           ${fld('address', 'Home address', isAdmin ? inputField('address', s.address) : readonlyField(s.address))}
         </div>
@@ -2731,7 +2743,7 @@ function openStudentModal(studentId) {
             </div>
             <div class="form-row">
               ${fld('altContactEmail', 'Email', inputField('altContactEmail', s.altContactEmail, 'email'))}
-              ${fld('altContactPhone', 'Phone', inputField('altContactPhone', s.altContactPhone, 'tel'))}
+              ${fld('altContactPhone', 'Phone', inputField('altContactPhone', formatPhone(s.altContactPhone), 'tel'))}
             </div>
           </div>
         </details>
@@ -2891,12 +2903,12 @@ function saveStudentModal(existingId) {
     parentFirstName:     isAdmin ? gv('parentFirstName')     : (s.parentFirstName || ''),
     parentLastName:      isAdmin ? gv('parentLastName')      : (s.parentLastName  || ''),
     parentEmail:         isAdmin ? gv('parentEmail')         : (s.parentEmail || ''),
-    phone:               isAdmin ? gv('phone')               : (s.phone || ''),
+    phone:               isAdmin ? gv('phone').replace(/\D/g, '')               : (s.phone || ''),
     address:             isAdmin ? gv('address')             : (s.address || ''),
     altContactFirstName: isAdmin ? gv('altContactFirstName') : (s.altContactFirstName || ''),
     altContactLastName:  isAdmin ? gv('altContactLastName')  : (s.altContactLastName  || ''),
     altContactEmail:     isAdmin ? gv('altContactEmail')     : (s.altContactEmail || ''),
-    altContactPhone:     isAdmin ? gv('altContactPhone')     : (s.altContactPhone || ''),
+    altContactPhone:     isAdmin ? gv('altContactPhone').replace(/\D/g, '')     : (s.altContactPhone || ''),
     speakingScore:       getBaseScore('speaking'),
     readingScore:        getBaseScore('reading'),
     writingScore:        getBaseScore('writing'),
@@ -4124,36 +4136,46 @@ function deleteSessionConfirm(name) {
 
 // ── ATTRIBUTES PAGE ──────────────────────────────────────────
 function renderAttributes() {
-  navigateAttr(_currentAttrTab);
+  renderAttributesChooser();
 }
 
-// ── SCHOOL ATTRIBUTES SUBTAB HELPERS ─────────────────────────
+// ── SETTINGS DROPDOWN CHOOSER ─────────────────────────────────
+// Clicking "Settings" in the sidebar always lands here first — pick
+// one of the 7 areas below, then that page renders on its own,
+// exactly as it always has. No persistent tab bar or dropdown is
+// shown once you're inside a specific page; go back via the sidebar
+// to choose a different one.
 
 const ATTR_TABS = [
-  { id: 'portal',   icon: '⚙️', label: 'Portal Settings' },
-  { id: 'teachers', icon: '👩‍🏫', label: 'Teachers' },
-  { id: 'classes',  icon: '🏫', label: 'Classes' },
-  { id: 'scoring',  icon: '📖', label: 'Edit Scoring Guide' },
+  { id: 'portal',    icon: '⚙️', label: 'Portal Settings' },
+  { id: 'teachers',  icon: '👩‍🏫', label: 'Teachers' },
+  { id: 'classes',   icon: '🏫', label: 'Classes' },
+  { id: 'scoring',   icon: '📖', label: 'Edit Scoring Guide' },
+  { id: 'fees',      icon: '💰', label: 'Fees Tracker' },
+  { id: 'inventory', icon: '📚', label: 'Book Inventory' },
+  { id: 'backup',    icon: '💾', label: 'Backup & Restore' },
 ];
-let _currentAttrTab = 'portal';
+let _currentAttrTab = null;
 
-function _attrTabBar(active) {
-  return `<div style="display:flex; gap:4px; margin-bottom:20px; border-bottom:2px solid var(--olive-light); padding-bottom:0;">
-    ${ATTR_TABS.map(t => `
-      <button onclick="navigateAttr('${t.id}')"
-        style="padding:8px 14px; font-size:13px; font-weight:${t.id===active?'600':'400'};
-               color:${t.id===active?'var(--orange-dark)':'var(--ink-mid)'};
-               background:none; border:none; border-bottom:${t.id===active?'2px solid var(--orange)':'2px solid transparent'};
-               margin-bottom:-2px; cursor:pointer; border-radius:0; white-space:nowrap;">
-        ${t.icon} ${t.label}
-      </button>`).join('')}
-  </div>`;
+function renderAttributesChooser() {
+  _currentAttrTab = null;
+  document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-attributes')?.classList.add('active');
+  document.getElementById('content-area').innerHTML = `
+    ${_attrPageHeader('Settings', 'Choose an area to manage')}
+    <div style="max-width:340px;">
+      <select class="form-select" onchange="if(this.value) navigateAttr(this.value)" style="width:100%;">
+        <option value="">Select a settings area…</option>
+        ${ATTR_TABS.map(t => `<option value="${t.id}">${t.icon} ${t.label}</option>`).join('')}
+      </select>
+    </div>
+  `;
 }
 
-function _attrPageHeader() {
+function _attrPageHeader(title, subtitle) {
   return `<div class="page-header">
-    <div class="page-title">School attributes</div>
-    <div class="page-subtitle">Manage portal settings, teachers, class attributes and edit scoring guide</div>
+    <div class="page-title">${escHtml(title || 'Settings')}</div>
+    <div class="page-subtitle">${escHtml(subtitle || '')}</div>
   </div>`;
 }
 
@@ -4162,10 +4184,13 @@ function navigateAttr(tab) {
   document.querySelectorAll('.sidebar-item').forEach(b => b.classList.remove('active'));
   document.getElementById('nav-attributes')?.classList.add('active');
   const fns = {
-    portal:   renderAttributesPortal,
-    teachers: renderAttributesTeachers,
-    classes:  renderAttributesClasses,
-    scoring:  renderAttributesScoringGuide,
+    portal:    renderAttributesPortal,
+    teachers:  renderAttributesTeachers,
+    classes:   renderAttributesClasses,
+    scoring:   renderAttributesScoringGuide,
+    fees:      renderFees,
+    inventory: renderInventory,
+    backup:    renderBackup,
   };
   if (fns[tab]) fns[tab]();
 }
@@ -4174,8 +4199,7 @@ function navigateAttr(tab) {
 function renderAttributesPortal() {
   _currentAttrTab = 'portal';
   document.getElementById('content-area').innerHTML = `
-    ${_attrPageHeader()}
-    ${_attrTabBar('portal')}
+    ${_attrPageHeader('Portal Settings', 'Message of the day, portal access, and other site-wide settings')}
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
       <!-- Message of the Day -->
       <div class="card" style="border-color:var(--orange); border-width:1.5px;">
@@ -4518,8 +4542,7 @@ async function renderAttributesTeachers() {
   }).join('');
 
   document.getElementById('content-area').innerHTML = `
-    ${_attrPageHeader()}
-    ${_attrTabBar('teachers')}
+    ${_attrPageHeader('Teachers', 'Add, remove, and view teacher activity')}
     <div class="card">
       <div class="card-title">Teachers</div>
       <div style="margin-bottom:12px;">${teacherRows || '<div style="color:var(--ink-light);font-size:13px;">No teachers yet.</div>'}</div>
@@ -4549,8 +4572,7 @@ function renderAttributesClasses() {
   ];
 
   document.getElementById('content-area').innerHTML = `
-    ${_attrPageHeader()}
-    ${_attrTabBar('classes')}
+    ${_attrPageHeader('Classes', 'Manage class levels, book levels, and class times')}
     <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
       ${sections.map(sec => `
         <div class="card">
@@ -4595,8 +4617,7 @@ function renderAttributesClasses() {
 function renderAttributesScoringGuide() {
   _currentAttrTab = 'scoring';
   document.getElementById('content-area').innerHTML = `
-    ${_attrPageHeader()}
-    ${_attrTabBar('scoring')}
+    ${_attrPageHeader('Edit Scoring Guide', 'Edit scoring guide content for each class level')}
     <div class="card" style="border-color:var(--olive); border-width:1.5px;">
       <div class="card-title">📖 Scoring Guide Editor</div>
       <div style="font-size:13px; color:var(--ink-mid); margin-bottom:14px;">
@@ -8084,6 +8105,16 @@ function escAttr(str) {
     .replace(/'/g, '&#39;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+// Formats a 10-digit phone number as xxx-xxx-xxxx for display. Anything
+// that isn't exactly 10 digits (empty, international, partial, already
+// formatted differently) is returned unchanged — safe fallback rather
+// than mangling something unexpected.
+function formatPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length !== 10) return raw || '';
+  return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
 }
 
 </script>
