@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-23.4';
+const APP_VERSION = 'v2026-08-28.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6854,6 +6854,16 @@ function loadAttendanceClass() {
   document.getElementById('att-quick-mark').classList.remove('hidden');
 
   const isTeacherRole = currentUser.role === 'teacher';
+
+  // Detect students in this class who share the exact same full name,
+  // so we can disambiguate them with a parent-name tag. Rare, but a
+  // real case exists in Fall-2026 (two "Mira Maheshwari" in one class).
+  const nameCounts = {};
+  students.forEach(s => {
+    const key = `${s.firstName} ${s.lastName}`.trim().toLowerCase();
+    nameCounts[key] = (nameCounts[key] || 0) + 1;
+  });
+
   const rows = students.map(s => {
     const sd  = (s.sessionData || []).find(d => d.session === sessName) || {};
     const att = (sd.attendance || {})[date] || 'unmarked';
@@ -6864,13 +6874,17 @@ function loadAttendanceClass() {
     );
     const attLabel = { present: '✓ Present', absent: '✗ Absent', vacation: '~ Vacation', unmarked: '— Unmarked' };
     const hwLabel = { yes: '✓ Yes', no: '✗ No', unknown: '— Unmarked' };
+    const nameKey = `${s.firstName} ${s.lastName}`.trim().toLowerCase();
+    const isDuplicateName = nameCounts[nameKey] > 1;
+    const displayName = `${escHtml(s.firstName)} ${escHtml(s.lastName)}` +
+      (isDuplicateName && s.parentFirstName ? ` <span style="font-weight:400; color:var(--ink-light); font-size:12px;">(${escHtml(s.parentFirstName)}'s)</span>` : '');
     return `
       <tr id="att-row-${s.id}" style="${!isOwn ? 'opacity:0.6;' : ''}">
         <td style="font-weight:500;">
           <a href="#" onclick="AppState.attContext={sessName:'${escAttr(sessName)}',date:'${escAttr(date)}',teacher:'${escAttr(teacher)}',classTime:'${escAttr(classTime)}'};openStudentModal('${s.id}');return false;"
              style="color:var(--orange);text-decoration:none;font-weight:500;"
              onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
-            ${escHtml(s.firstName)} ${escHtml(s.lastName)}
+            ${displayName}
           </a>
         </td>
         <td style="font-size:12px; color:var(--ink-light);">${escHtml(sd.teacher || '—')}</td>
@@ -7176,6 +7190,11 @@ function renderIntakeInfoView(student, currentSess) {
   const absent   = pastDates.filter(d => att[d] === 'absent').length;
   const vacation = pastDates.filter(d => att[d] === 'vacation').length;
 
+  // Homework completion summary for current session
+  const hw = sd.homeworkDone || {};
+  const hwYes = pastDates.filter(d => hw[d] === 'yes').length;
+  const hwNo  = pastDates.filter(d => hw[d] === 'no').length;
+
   document.getElementById('intake-info-view').innerHTML = `
     <div class="card" style="margin-bottom:14px;">
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px;">
@@ -7244,6 +7263,35 @@ function renderIntakeInfoView(student, currentSess) {
                 <span style="color:var(--danger);">✗ Absent: ${absent}</span>
                 <span style="color:var(--warning);">~ Vacation: ${vacation}</span>
                 ${pastDates.length - present - absent - vacation > 0 ? `<span style="color:var(--ink-light);">? Unmarked: ${pastDates.length - present - absent - vacation}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        ${classDates.length > 0 ? `
+          <div style="margin-bottom:16px;">
+            <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px;">Homework completed</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              ${classDates.map(d => {
+                const isPast = d <= today;
+                const status = hw[d] || (isPast ? 'unknown' : 'upcoming');
+                const styles = {
+                  yes:      'background:#E8F5EE; color:#2E7D52; border-color:#2E7D52;',
+                  no:       'background:#FDECEA; color:#C0392B; border-color:#C0392B;',
+                  unknown:  'background:var(--cream-dark); color:var(--ink-light); border-color:var(--olive-mid);',
+                  upcoming: 'background:var(--olive-pale); color:var(--olive-light); border-color:var(--olive-mid);',
+                };
+                const icons = { yes:'✓', no:'✗', unknown:'?', upcoming:'' };
+                return `<div style="padding:4px 10px; border-radius:6px; border:1px solid; font-size:12px; font-weight:500; ${styles[status]}">
+                  ${d.slice(5)} ${icons[status]}
+                </div>`;
+              }).join('')}
+            </div>
+            ${pastDates.length > 0 ? `
+              <div style="display:flex; gap:16px; margin-top:10px; font-size:12px;">
+                <span style="color:var(--success);">✓ Yes: ${hwYes}</span>
+                <span style="color:var(--danger);">✗ No: ${hwNo}</span>
+                ${pastDates.length - hwYes - hwNo > 0 ? `<span style="color:var(--ink-light);">? Unmarked: ${pastDates.length - hwYes - hwNo}</span>` : ''}
               </div>
             ` : ''}
           </div>
