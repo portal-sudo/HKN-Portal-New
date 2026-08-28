@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-28.1';
+const APP_VERSION = 'v2026-08-28.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -5945,7 +5945,7 @@ function renderEmail() {
   const isAdmin     = currentUser.role === 'admin';
   const isTeacher   = currentUser.role === 'teacher';
   const activeSessName = (SessionEngine.getActiveSession() || sessions.slice(-1)[0])?.name || '';
-  const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{teacher}}'];
+  const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{bookNumber}}','{{teacher}}'];
   const settings    = DB.getSettings();
   const templates   = DB.getTemplates();
 
@@ -6452,6 +6452,7 @@ function resolvePlaceholders(text, student) {
     .replace(/{{studentId}}/g,        student.studentId || 'Pending')
     .replace(/{{classTime}}/g,        sessData.classTime || '')
     .replace(/{{classLevel}}/g,       sessData.classLevel || '')
+    .replace(/{{bookNumber}}/g,       sessData.bookLevel || '')
     .replace(/{{teacher}}/g,          sessData.teacher || '');
 }
 
@@ -6588,7 +6589,7 @@ function openEditTemplateEditor(id) {
 
 function renderTemplateEditor(tmpl) {
   const isNew = !tmpl;
-  const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{fees}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{teacher}}'];
+  const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{fees}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{bookNumber}}','{{teacher}}'];
   const html = `
     <div class="modal" style="max-width:640px;">
       <div class="modal-header">
