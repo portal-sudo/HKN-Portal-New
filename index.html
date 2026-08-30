@@ -1168,7 +1168,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-28.2';
+const APP_VERSION = 'v2026-08-28.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -5970,6 +5970,10 @@ function renderEmail() {
           ${_renderMultiSelectFilter('session', 'All sessions', sessions.map(s => s.name), [activeSessName])}
           ${_renderMultiSelectFilter('level', 'All levels', DB.getClassLevels(), [])}
           ${_renderMultiSelectFilter('teacher', 'All teachers', isAdmin ? DB.teacherNames() : [currentUser.name], [])}
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-mid); cursor:pointer; white-space:nowrap;">
+            <input type="checkbox" id="email-filter-nophoto" onchange="loadEmailRecipients()" style="margin:0;"/>
+            📷 Missing photo only
+          </label>
         </div>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
           <button class="btn btn-ghost btn-sm" onclick="toggleAllRecipients(true)">Select all</button>
@@ -6201,6 +6205,9 @@ function loadEmailRecipients() {
   const teacher    = _getMultiSelectValues('teacher');
   const isTeacher = currentUser.role === 'teacher';
   let students = DB.searchStudents({ status, session, teacher, classLevel }).filter(s => s.parentEmail);
+  if (document.getElementById('email-filter-nophoto')?.checked) {
+    students = students.filter(s => !s.photoPath);
+  }
   // If arriving from fees tracker, pre-filter to selected students only
   if (_emailPreselectIds.length > 0) {
     students = students.filter(s => _emailPreselectIds.includes(s.id));
