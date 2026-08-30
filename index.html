@@ -671,7 +671,14 @@ const STUDENT_STATUSES = ['Interest','Invited','In-Process','Active','Alumni','G
 // arriving via that specific flow (see emailParentCheckinBucket()).
 const CHECKIN_REMINDER_TEMPLATE = {
   subject: "A quick update on {{studentFirstName}}'s progress is waiting on the HKN Portal",
-  body: "Dear {{parentFirstName}},<br><br>We wanted to reach out because it's been a little while since you last checked in on {{studentFirstName}}'s notes on the HKN Portal. {{teacher}} has been adding homework and specific notes for {{studentFirstName}}, and checking in regularly is a great way to help {{studentFirstName}} keep making progress in learning Hindi.<br><br>When you log in, you'll need the same 4 details you provided during enrollment. If you run into any trouble accessing the portal, just reach out to info@hindikineev.org and we'll be happy to help.<br><br>Thank you for being part of {{studentFirstName}}'s Hindi learning journey!<br><br>Warm regards,<br>The HKN Team",
+  body: "Dear {{parentFirstName}},<br><br>We wanted to reach out because it's been a little while since you last checked in on {{studentFirstName}}'s notes on the HKN Portal. {{teacher}} has been adding homework and specific notes for {{studentFirstName}}, and checking in regularly is a great way to help {{studentFirstName}} keep making progress in learning Hindi.<br><br>When you log in, you'll need the same 4 details you provided during enrollment. If you run into any trouble accessing the portal, just reach out to portal@hindikineev.org and we'll be happy to help.<br><br>Thank you for being part of {{studentFirstName}}'s Hindi learning journey!<br><br>Warm regards,<br>The HKN Team",
+};
+// Pre-season variant — used before a session has actually started, when
+// there's no homework/notes yet to reference. Points parents to their
+// child's class assignment instead, ahead of Orientation Day.
+const CHECKIN_REMINDER_TEMPLATE_PRESEASON = {
+  subject: "Please check {{studentFirstName}}'s class details on the HKN Portal",
+  body: "Dear {{parentFirstName}},<br><br>We wanted to reach out because it's been a little while since you last checked the HKN Portal. With Fall 2026 Orientation Day coming up on September 12, now's a great time to log in and confirm a few things for {{studentFirstName}}:<br><br>- Your enrollment is showing as <strong>Active</strong><br>- Assigned teacher: <strong>{{teacher}}</strong><br>- Class level: <strong>{{classLevel}}</strong><br>- Class time: <strong>{{classTime}}</strong><br><br>You'll want this info in hand for Orientation Day, so it's worth a quick check now rather than being surprised on the day itself.<br><br>When you log in, you'll need the same 4 details you provided during enrollment. If you run into any trouble accessing the portal, just reach out to portal@hindikineev.org and we'll be happy to help.<br><br>Thank you, and we look forward to seeing {{studentFirstName}} on the 12th!<br><br>Warm regards,<br>The HKN Team",
 };
 const SESSION_TERMS    = ['Fall','Winter','Spring'];
 
@@ -1168,7 +1175,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-29.2';
+const APP_VERSION = 'v2026-08-29.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4379,7 +4386,8 @@ function showParentCheckinBucket(label) {
       </div>
       <div class="modal-footer">
         ${(currentUser.role === 'admin' && list.length > 0) ? `
-          <button class="btn btn-primary" onclick="emailParentCheckinBucket('${escAttr(label)}')">✉️ Email these parents</button>
+          <button class="btn btn-secondary" onclick="emailParentCheckinBucket('${escAttr(label)}', 'preseason')">✉️ Pre-season reminder</button>
+          <button class="btn btn-primary" onclick="emailParentCheckinBucket('${escAttr(label)}', 'inseason')">✉️ Full reminder</button>
         ` : ''}
         <button class="btn btn-secondary" onclick="closeModal()">Close</button>
       </div>
@@ -4387,14 +4395,14 @@ function showParentCheckinBucket(label) {
   showModal(html);
 }
 
-function emailParentCheckinBucket(label) {
+function emailParentCheckinBucket(label, variant) {
   const list = _parentCheckinBuckets[label] || [];
   if (!list.length) return;
   _emailPreselectIds = list.map(entry => entry.id);
   _emailPreselectLabel = label === 'Never'
     ? 'who have never checked in to the parent portal'
     : `who haven't checked in for ${label}${label.endsWith('+') ? '' : ' days'}`;
-  _emailPreselectTemplate = CHECKIN_REMINDER_TEMPLATE;
+  _emailPreselectTemplate = variant === 'preseason' ? CHECKIN_REMINDER_TEMPLATE_PRESEASON : CHECKIN_REMINDER_TEMPLATE;
   closeModal();
   navigateTo('email');
 }
@@ -6406,7 +6414,7 @@ async function sendEmailGmail() {
       body;
     try {
       await GMAIL.sendOne({
-        to: 'info@hindikineev.org',
+        to: 'portal@hindikineev.org',
         subject: `From Portal: ${subject}`,
         body: auditBody
       });
@@ -7352,7 +7360,7 @@ function renderIntakeInfoView(student, currentSess) {
     </div>
     <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:12px 16px; font-size:13px; color:var(--olive); text-align:center; margin-top:14px;">
       💡 Check this page weekly for attendance updates and notes from your child's teacher.
-      If you have any questions, please contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+      If you have any questions, please contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
     </div>
   `;
 }
