@@ -1175,7 +1175,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-08-29.6';
+const APP_VERSION = 'v2026-09-02.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6043,6 +6043,7 @@ function renderEmail() {
             <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('bold')" title="Bold"><strong>B</strong></button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('italic')" title="Italic"><em>I</em></button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('underline')" title="Underline" style="text-decoration:underline;">U</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="emailInsertLink()" title="Insert link">🔗</button>
             <span style="width:1px; background:var(--olive-mid); margin:0 4px;"></span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#000000')" title="Black" style="color:#000000;">A</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="emailFormat('foreColor','#c0392b')" title="Red" style="color:#c0392b;">A</button>
@@ -6270,6 +6271,12 @@ function emailFormat(cmd, val) {
   document.execCommand(cmd, false, val || null);
 }
 
+function emailInsertLink() {
+  const url = prompt('Enter the URL to link to:', 'https://');
+  if (!url) return;
+  _createLinkAtSavedPosition('email-body', url);
+}
+
 // ── PLACEHOLDER INSERTION AT CURSOR ─────────────────────────────
 // Clicking a placeholder chip moves focus away from the contenteditable
 // body, which causes the browser to lose track of exactly where the
@@ -6302,6 +6309,26 @@ function _insertAtSavedPosition(fieldId, text) {
   }
   document.execCommand('insertText', false, text);
   _saveEditableSelection(fieldId); // update saved position to right after the insert
+}
+
+// Wraps the saved selection in a link, rather than inserting new text.
+// Reuses the same save/restore approach — the button click first triggers
+// the field's onblur (saving the selection), then the URL prompt (which
+// also steals focus) doesn't matter, since we restore from the already-
+// saved position afterward rather than relying on whatever's selected
+// at the moment this actually runs.
+function _createLinkAtSavedPosition(fieldId, url) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  el.focus();
+  const saved = _lastEditableSelection[fieldId];
+  if (saved) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(saved);
+  }
+  document.execCommand('createLink', false, url);
+  _saveEditableSelection(fieldId);
 }
 
 function insertPlaceholder(ph) {
@@ -6653,6 +6680,7 @@ function renderTemplateEditor(tmpl) {
             <button type="button" class="btn btn-secondary btn-sm" onclick="teFormat('bold')" title="Bold"><strong>B</strong></button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="teFormat('italic')" title="Italic"><em>I</em></button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="teFormat('underline')" title="Underline" style="text-decoration:underline;">U</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="teInsertLink()" title="Insert link">🔗</button>
             <span style="width:1px; background:var(--olive-mid); margin:0 4px;"></span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="teFormat('foreColor','#000000')" title="Black" style="color:#000000;">A</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="teFormat('foreColor','#c0392b')" title="Red" style="color:#c0392b;">A</button>
@@ -6689,6 +6717,12 @@ function renderTemplateEditor(tmpl) {
 function teFormat(cmd, val) {
   document.getElementById('te-body')?.focus();
   document.execCommand(cmd, false, val || null);
+}
+
+function teInsertLink() {
+  const url = prompt('Enter the URL to link to:', 'https://');
+  if (!url) return;
+  _createLinkAtSavedPosition('te-body', url);
 }
 
 function insertTmplPlaceholder(fieldId, ph) {
