@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-04.2';
+const APP_VERSION = 'v2026-09-04.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6729,17 +6729,21 @@ function onCdTrackCdChange() {
 }
 
 function onCdTrackTrackChange() {
+  const cd = document.getElementById('cdtrack-cd-sel')?.value;
   const trackId = document.getElementById('cdtrack-track-sel')?.value;
   const area = document.getElementById('cdtrack-preview-area');
-  if (!trackId) { area.innerHTML = ''; return; }
+  if (!trackId || !cd) { area.innerHTML = ''; return; }
+  const track = (CD_TRACKS[cd] || []).find(t => t.id === trackId);
   const link = `https://drive.google.com/file/d/${trackId}/view`;
+  const label = track ? `🎵 ${cd} Track ${track.num}: ${track.label}` : '🎵 Listen to this track';
   area.innerHTML = `
     <div class="card" style="max-width:600px;">
       <iframe src="https://drive.google.com/file/d/${trackId}/preview" width="100%" height="80" style="border:none; border-radius:var(--radius-sm);" allow="autoplay"></iframe>
       <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
-        <input type="text" class="form-input" id="cdtrack-link-box" readonly value="${escAttr(link)}" style="flex:1; font-size:12px; color:var(--ink-mid);"/>
+        <input type="text" class="form-input" id="cdtrack-link-box" readonly value="${escAttr(link)}" data-label="${escAttr(label)}" style="flex:1; font-size:12px; color:var(--ink-mid);"/>
         <button class="btn btn-primary btn-sm" onclick="copyCdTrackLink()">📋 Copy Link</button>
       </div>
+      <div style="font-size:11px; color:var(--ink-light); margin-top:8px;">Pastes as a clean clickable label in an email; pastes as the plain link in a plain-text note field.</div>
     </div>
   `;
 }
@@ -6747,13 +6751,29 @@ function onCdTrackTrackChange() {
 function copyCdTrackLink() {
   const box = document.getElementById('cdtrack-link-box');
   if (!box) return;
-  box.select();
-  navigator.clipboard.writeText(box.value).then(() => {
-    showToast('Link copied!', 'success');
-  }).catch(() => {
-    document.execCommand('copy');
-    showToast('Link copied!', 'success');
-  });
+  const url = box.value;
+  const label = box.dataset.label || url;
+  const htmlContent = `<a href="${escAttr(url)}">${escHtml(label)}</a>`;
+
+  if (navigator.clipboard && window.ClipboardItem) {
+    const item = new ClipboardItem({
+      'text/html': new Blob([htmlContent], { type: 'text/html' }),
+      'text/plain': new Blob([url], { type: 'text/plain' }),
+    });
+    navigator.clipboard.write([item]).then(() => {
+      showToast('Link copied!', 'success');
+    }).catch(() => {
+      navigator.clipboard.writeText(url).then(() => showToast('Link copied!', 'success'));
+    });
+  } else {
+    box.select();
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Link copied!', 'success');
+    }).catch(() => {
+      document.execCommand('copy');
+      showToast('Link copied!', 'success');
+    });
+  }
 }
 
 function renderTemplates() {
