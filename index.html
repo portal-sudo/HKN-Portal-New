@@ -681,6 +681,115 @@ const CHECKIN_REMINDER_TEMPLATE_PRESEASON = {
   body: "Dear {{parentFirstName}},<br><br>We wanted to reach out because it's been a little while since you last checked the HKN Portal. With Fall 2026 Orientation Day coming up on September 12, now's a great time to log in and confirm a few things for {{studentFirstName}}:<br><br>- Your enrollment is showing as <strong>Active</strong><br>- Assigned teacher: <strong>{{teacher}}</strong><br>- Class level: <strong>{{classLevel}}</strong><br>- Class time: <strong>{{classTime}}</strong><br><br>You'll want this info in hand for Orientation Day, so it's worth a quick check now rather than being surprised on the day itself.<br><br>When you log in, you'll need the same 4 details you provided during enrollment. If you run into any trouble accessing the portal, just reach out to portal@hindikineev.org and we'll be happy to help.<br><br>Thank you, and we look forward to seeing {{studentFirstName}} on the 12th!<br><br>Warm regards,<br>The HKN Team",
 };
 const SESSION_TERMS    = ['Fall','Winter','Spring'];
+// CD track links for Homework Notes — compiled from the Hindi Books CDs
+// Drive folder (portal@ My Drive), verified and cleaned up September 2026.
+const CD_TRACKS = {
+  'CD1': [
+    { num: 1, id: '11i_6XnqOI45CkjwvbItU2hTGx4-qUFNo', label: 'Introduction to CD' },
+    { num: 2, id: '11fy1ZBS_AJhVjmXa3k74a7ayqvNhNjQ-', label: 'Intro Song for Children' },
+    { num: 3, id: '1G8pvmK_fHBHATIibq_Wp6jPxd8VuBdSu', label: 'Class 1 Cluster 1 Rhymes' },
+    { num: 4, id: '1JaoeeZUA5f_njkAqj7I9XZVft1cOpTxF', label: 'Class 1 Cluster 1 Reading Text - Nana Ka Kaan' },
+    { num: 5, id: '1Hze3xodZ_SDZNEl3L0luTu2PeLD4Lt3m', label: 'Class 1 Cluster 1 Dialogue - Namaste Lalaji' },
+    { num: 6, id: '1giJ0TMNiEcNi7sviRoGDGm2O-J0LzfCe', label: 'Class 1 Cluster 2 Rhymes' },
+    { num: 7, id: '1FQXUr9cB1TAXxumduXzfRYqJhou-dSPC', label: 'Class 1 Cluster 2 Reading Text - Mausi Mala Layee' },
+    { num: 8, id: '1XU1yFBlvWrMp6xTHAm9d3f4QjxuN4BVb', label: 'Class 1 Cluster 2 Dialogue - Tata Neena' },
+    { num: 9, id: '1d8gcf28RwkF8Zkn7VtoRBbqRNVz04Dsf', label: 'Class 1 Cluster 3 Rhymes' },
+    { num: 10, id: '1etDbE7lbrRzF5HND4f21We3WVJuh6vQo', label: 'Class 1 Cluster 3 Reading Text - Leela Ne Gadbar Ki' },
+    { num: 11, id: '15IOZNNkV-OpXt1kXXXWD_qqwDWc7453T', label: 'Class 1 Cluster 3 Dialogue - Nayee Gudiyaa' },
+  ],
+  'CD2': [
+    { num: 1, id: '1bLsQW7k6xu1z16LtVOckyB29qOa19tVt', label: 'Introduction and Instructions for Class 2' },
+    { num: 2, id: '1KNgtW1gHGD0QM7MD6GONjxoBrw2FzB6C', label: 'Revision of Class 1 Rhymes' },
+    { num: 3, id: '1gVnyzasuUgRSa6oEAMID5C2_4LqIMIF0', label: 'Class 2 Cluster 4 Rhymes' },
+    { num: 4, id: '1cn7VEGzNsk2KcmlAgD1V8pqGL8-hsQC5', label: 'Class 2 Cluster 4 Reading Text - Dada Dadi Ke Ghar Chalo' },
+    { num: 5, id: '1RtE9jkVb16zvnOy6h4YUntPLWFy2wVIZ', label: 'Class 2 Cluster 4 Dialogue - Diwali Mubarak' },
+    { num: 6, id: '1y-ay9UrN6Vm8GmyNqr3BCxmHx4oLRPQt', label: 'Class 2 Cluster 5 Rhymes' },
+    { num: 7, id: '1dLutAbeGcwT0Rz-O5qs-DVkCUqHaJuY5', label: 'Class 2 Cluster 5 Reading Text - Khilone Ka Kutta' },
+    { num: 8, id: '10xnUiompEWV_LFOmqo_vNLgh336S8VbN', label: 'Class 2 Cluster 5 Dialogue - Maja Aa Gaya' },
+    { num: 9, id: '1EJqBAWWIWhcIshOMJR91qzciI8GQWnf3', label: 'Class 2 Cluster 6 Rhymes' },
+    { num: 10, id: '1xC5r8h8eNawcf8ODVghq-rrlF2kFCYdI', label: 'Class 2 Cluster 6 Reading Text - Dada Dadi Ke Ghar Par' },
+    { num: 11, id: '1zE9nFuyPAZKmSzsbXw9z3ov-U5e5RlPz', label: 'Class 2 Cluster 6 Dialogue - Meri Madad Karo' },
+    { num: 12, id: '17dtgY6dormezUzRuRVFyG65yhW-u31mt', label: 'Class 2 Cluster 7 Rhymes' },
+    { num: 13, id: '1S2aYKm_xd38e0o2LCKBtkCFJkv3t2AP3', label: 'Class 2 Cluster 7 Reading Text - Chithi Aayee Hai' },
+    { num: 14, id: '1-Oh8GEYC2-yco3tzPT_yWDtXaVyrgr_x', label: 'Class 2 Cluster 7 Dialogue - Acha Shuru Kartien Hain' },
+    { num: 15, id: '1WXVlXxw5_ofp3zNtvIP1xfVHTLHYp44D', label: 'Concluding Song' },
+  ],
+  'CD3': [
+    { num: 1, id: '1pEj6NNUEU9Hc2YdrakGODoO9h9HNbUXM', label: 'Introduction to the CD and Instructions' },
+    { num: 2, id: '1fAxSCpsOV8l2uYkIP__8LgVvhcVCHwUy', label: 'Class 3 Lesson 1 Dialogue - Naya Dost' },
+    { num: 3, id: '1aPEh6kkFBk5_OmvAudVwsUGJxXg7OJah', label: 'Class 3 Lesson 1 Story - School Ka Pehla Din 1' },
+    { num: 4, id: '1sxGBZYeU_wYF1KVfH-9kM_jw3_7pQw-r', label: 'Class 3 Lesson 1 Song 1 - Hindi Ki Ginti' },
+    { num: 5, id: '1vB8dYeTjuIMB8MDL_1bELsDnrWRYxKVz', label: 'Class 3 Lesson 1 Song 2 - Shaadi Ke Geet' },
+    { num: 6, id: '1pQil2jR7IY-b7IcyrSVVYiABh0sau7ar', label: 'Class 3 Lesson 2 Dialogue - Patang Gend Aur Lattoo' },
+    { num: 7, id: '18TXUhTuHonCTPljJk-TJsqeKNptuBpMg', label: 'Class 3 Lesson 2 Story - Ganit Ka Path' },
+    { num: 8, id: '1FqfK108yQe7WX8B2sxxfR8CN48MRhcbt', label: 'Class 3 Lesson 2 Song 3 - Rangon Ka Geet' },
+    { num: 9, id: '1KHNuEvxyUFmHQIfzV-YhM9eTOOBsxLxy', label: 'Class 3 Lesson 3 Dialogue - Kaun Kahan Rehtaa Hai' },
+    { num: 10, id: '1q8G_2BTDAh_T-iMBaqRV_k9fZ9tyA9o3', label: 'Class 3 Lesson 3 Story - Jaanwaron Ke Ghar 1' },
+    { num: 11, id: '1-Jn8OxXCfLpon86ARcuwmb6429I--4Hc', label: 'Class 3 Lesson 3 Song 4 - Jungle Ki Duniyaa' },
+    { num: 12, id: '1nb0d0iiAC9G9G1BYax8SJUAb7R5aotHw', label: 'Class 3 Lesson 3 Text - Paaltu Jaanwar' },
+    { num: 13, id: '1Ut8MjDwcqu6REujBAGhC_KYgJrijC8IA', label: 'Class 3 Lesson 4 Dialogue - Kise Kya Pasand Hai' },
+    { num: 14, id: '1cvQ5eqn79BmxiCryN8gBnE5X4vfYkqHg', label: 'Class 3 Lesson 4 Story - Picnic Ki Taiyaari' },
+    { num: 15, id: '1atLDpk8beDZXF03J_S7U0yGn3f6vXe1Y', label: 'Class 3 Lesson 4 Song 5 - Gudiya Ko' },
+    { num: 16, id: '1H6HuEf0wlkl84Mmet4soYf5otNoxPNno', label: 'Class 3 Lesson 5 Dialogue - Park Mein' },
+    { num: 17, id: '1VppbuQfb-68jnJhEHRCK5f5sB8YKgDIi', label: 'Class 3 Lesson 5 Story - Nadi Kinaare 1' },
+    { num: 18, id: '1hjjDl_od-c3cV5_i5BN6TM0xcAHdk7xk', label: 'Class 3 Lesson 5 Song 6 - Poshampaa' },
+  ],
+  'CD4': [
+    { num: 1, id: '1dmohHSKSrYLf_WHRNmF83xSaXRdNGA68', label: 'Introduction to CD and Instructions' },
+    { num: 2, id: '1tphQNoy5Znoue-LaFSLPKTo7AKFqRku4', label: 'Class 4 Lesson 1 Dialogue - Heena Aur Noor Chitra Banatien Hain' },
+    { num: 3, id: '1zrQL_4GsMHqqbpuWhewypEU_MQkxi9Wz', label: 'Class 4 Lesson 1 Story - Kiska Chuha Kaisa Chuha' },
+    { num: 4, id: '1s0lp3UEoaFKo0gZzmok_MMtc7wsBURPU', label: 'Class 4 Lesson 1 Song - Lala Ji' },
+    { num: 5, id: '1FAhWUcqyXFhVPvdhvNgrze3EbHXfZvkq', label: 'Class 4 Lesson 2 Dialogue - Subah Ka Samay' },
+    { num: 6, id: '1nw-z30tyOoys7ddCD3Ozs5izoOhxkYBj', label: 'Class 4 Lesson 2 Story - Bandar Wala' },
+    { num: 7, id: '1qMQKPI738jF6QJe90sZAlArUIVZyc5Ns', label: 'Class 4 Lesson 2 Song 2 - Ghari Ki Suiyaan' },
+    { num: 8, id: '1iOBVg0feOgCteDhS6ZkhVyoj_Q8T2zxT', label: 'Class 4 Lesson 3 Dialogue - Jab Ghar Mein Ek Chuha Aaya' },
+    { num: 9, id: '1m4atJVlzydV6pOH8pgotTN9tZ34I7UKp', label: 'Class 4 Lesson 3 Story - Padma Ji Aur Unka Kutta' },
+    { num: 10, id: '1bWam0I8wRgTBCGST6DcY-jYdcqSFJ8Tl', label: 'Class 4 Lesson 3 Song - Ek Chuha Chidiya Se Bola' },
+    { num: 11, id: '1y_FFhzJmJxfiwZrR3BgnpQzGTzMf8C_J', label: 'Class 4 Lesson 4 Dialogue - Aaj Kaisa Mausam Hai' },
+    { num: 12, id: '1WNGZl-wd_NvwyF-_Jwnf17PHnRXG9_pT', label: 'Class 4 Lesson 4 Story - Moti' },
+    { num: 13, id: '1KGqyOiyb9pA4dMsAKTuKNIgd02Yr3Trt', label: 'Class 4 Lesson 4 Poems - Garmi Aaye and Jaada' },
+    { num: 14, id: '1cHymnqzM3WmIfJHBMtqeR-xubYY6HuTK', label: 'Class 4 Lesson 4 Song - Saawan Ka Geet' },
+    { num: 15, id: '1xuQqrOH4-Pl3RF-kirD5kk7IrFKsHbn5', label: 'Class 4 Lesson 5 Dialogue - Heena Ko Bukhar Hai' },
+    { num: 16, id: '1JibyLQNyGJ0y45rPxMtg5mwI-akZYtvQ', label: 'Class 4 Lesson 5 Story - Amar Ko Chot Lagi' },
+    { num: 17, id: '18gUbEQjebqsJ5Y5rjzPov5sFC8zJL_lm', label: 'Class 4 Lesson 5 Song - Doctor Dekho Bhali Prakar' },
+  ],
+  'CD5 (Tracks 1-17)': [
+    { num: 1, id: '1EXhXcGMHKtQKZikTmbFuDeHZAGKi5HUW', label: 'Introduction and Instructions for the CD' },
+    { num: 2, id: '10PY1JtVbpqSSdsJCrxMR7oSBtFFgKV94', label: 'Class 5 Cluster 1 Story - Neena Ki Naani' },
+    { num: 3, id: '1I5aS0u5XTVNxEY3w-24Yf5aYq6dFRQWC', label: 'Class 5 Cluster 1 Diary - Pema Ki Diary Ke Kuch Panne' },
+    { num: 4, id: '1HtzfSL5raoqOUEpNrDBV6Rk4DX9HV1Bb', label: 'Class 5 Cluster 1 - Uncle Tom and 2 Jokes' },
+    { num: 5, id: '1SvYmojErE_8LtvoIegg24Myd02Ap5xxK', label: 'Class 5 Cluster 1 Story - Papa Ke School Ka Pehla Din' },
+    { num: 6, id: '1HbCWbTQS7ku7BA2nUcOK_njWHTMxx0u4', label: 'Class 5 Cluster 1 Story - Emil Soup Ki Haandi Mein' },
+    { num: 7, id: '1sMMCWyYpy2OL_mSWYhuG_TmByV1K8tCR', label: 'Class 5 Cluster 1 Story - Beej Ka Safar' },
+    { num: 8, id: '1fZfo1QglDHJM3WINNx64QwquL5YDvh92', label: 'Class 5 Cluster 1 Poem - Nanha Paudha' },
+    { num: 9, id: '1ohCgPGRwP20kDZdA7OLO78h1xqbHBine', label: 'Class 5 Cluster 1 Poem - Baansuri Wala' },
+    { num: 10, id: '10wnpz6fE2--eYKrMXxsDwCZXV-VJPSQ6', label: 'Class 5 Cluster 1 A True Story - Duniyaa Ke Ascharya 1' },
+    { num: 11, id: '1se_zLga1eH3mOkqbieuHqjCqSmZDtx3V', label: 'Class 5 Cluster 1 - Lomri Aur Kachue' },
+    { num: 12, id: '1FbDreqapfcZnL2v_dm_0XlIe7C6MaR_0', label: 'Class 5 Cluster 2 Story - Dadi Sa Ab E-mail Par' },
+    { num: 13, id: '1dGAO1fX3qdYthE48fFMBSlLU0S0w2VxS', label: 'Class 5 Cluster 2 Auto Biography - Ek Kali Doo Pattiyan' },
+    { num: 14, id: '1BPDDE19on81auEYdGEx-bIbBurkJBQG7', label: 'Class 5 Cluster 2 Poem - Aloo Mirchi Chai Ji' },
+    { num: 15, id: '1S4kQ_1mGEYjHpOzd6fQL8OAl5YFDSzJ2', label: 'Class 5 Cluster 2 Memoir - Pandit Gore Lal Ji' },
+    { num: 16, id: '14p390dStwLKjJOuyBUjf79Nmc2E1Q2cW', label: 'Class 5 Cluster 2 Jeeney Ke Tarikey - Oont' },
+    { num: 17, id: '1t8fM5P9uHU4UNjdlv7LuBVpkoj0O2Lgh', label: 'Class 5 Cluster 2 Jeeney Ke Tarikey - Safed Bhaloo' },
+  ],
+  'CD5 (Tracks 18-31)': [
+    { num: 18, id: '1bqIz2cW5AeuDbXhohp4VhRNsDUT-7y5i', label: 'Class 5 Cluster 2 Jeeney Ke Tarikey - Alasveer Bhaloo' },
+    { num: 19, id: '1D3dK1fHyo0Nw5-TA86JyEjNLaWBPlWam', label: 'Class 5 Cluster 2 Play - Apsara Ka Tota' },
+    { num: 20, id: '1DkzeahSPIYrjRgt8wk2hsbH5oFrZvHBl', label: 'Class 5 Cluster 2 Story - Hatheli Par Baal' },
+    { num: 21, id: '17xE3x2Bwttqsnyv7iI6BcqiNkzOT-nKT', label: 'Class 5 Cluster 2 - Jaldi Jaldi Bol Kar' },
+    { num: 22, id: '11lHZ8thToVpt-UiJPJj-OFJI-BJapZj9', label: 'Class 5 Cluster 2 - Batuta Ka Juta' },
+    { num: 23, id: '14yKalUxVz6DFKt2DqCXDt396a6IPOfP6', label: 'Class 5 Cluster 2 Song 2 - Paksiyon Ka' },
+    { num: 24, id: '10zxCV6dvaJY8U30HULAgLHr0yni0HOag', label: 'Class 5 Cluster 3 Story - Kachuey Kahan Gaye' },
+    { num: 25, id: '1n0BcjwyPt9I6VXnNKGorbj9Ks18FJ__V', label: 'Class 5 Cluster 3 Biography - Louis Braille' },
+    { num: 26, id: '1qvQjkjp4VWuOWFte4YIzoz_wcN8Jcg-V', label: 'Class 5 Cluster 3 Story - Neetay Ke Seeng' },
+    { num: 27, id: '1Kz1YWX4PfPIVU_cL5t1ko78vOXxP-UTS', label: 'Class 5 Cluster 3 Lekh - Surtesy' },
+    { num: 28, id: '1g2gBdXd9R_oqJytajtZT0IxfHySb3drv', label: 'Class 5 Cluster 3 Story - Alladin' },
+    { num: 29, id: '1OaO3H3H1FcfxtoaWdGhTti-V9GuQxan0', label: 'Class 5 Cluster 3 Poem - Chand Ka Kurta' },
+    { num: 30, id: '1xhnr9Po9SYT6fPNpnCN6AbelIrE9t4aw', label: 'Class 5 Cluster 3 Story - Kutte Aur Gilahri Ki Dosti' },
+    { num: 31, id: '1330dVmR52Cf6XKfevPAMi5GsNWWwnh42', label: 'Class 5 Cluster 3 Song - Sabko Rah Dikhlaane Wala' },
+  ],
+};
+
 
 // ── SESSION ENGINE ───────────────────────────────────────────
 const SessionEngine = {
@@ -1175,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-02.1';
+const APP_VERSION = 'v2026-09-04.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1515,6 +1624,7 @@ function buildSidebar() {
     { id:'directory', icon:'👥', label:'Student directory' },
     { section: 'Students' },
     ...(!isMobile ? [{ id:'email', icon:'✉️', label:'Send email' }, { id:'templates', icon:'📋', label:'Email templates' }] : []),
+    { id:'cd-tracks', icon:'🎵', label:'CD Tracks' },
     { section: 'School' },
     ...(currentUser.role === 'teacher' ? [{ id:'attendance', icon:'📝', label:'Mark attendance' }] : []),
     ...(isAdmin ? [{ id:'attendance', icon:'📝', label:'Mark attendance' }] : []),
@@ -1580,6 +1690,7 @@ function navigateTo(page) {
     attributes:  renderAttributesChooser,
     email:       renderEmail,
     templates:   renderTemplates,
+    'cd-tracks': renderCdTracks,
     attendance:  renderAttendance,
   };
   const fn = pages[page];
@@ -6580,6 +6691,69 @@ function naturalCompare(a, b) {
     }
   }
   return 0;
+}
+
+// ── CD TRACKS ──────────────────────────────────────────────────
+function renderCdTracks() {
+  const html = `
+    <div class="page-header">
+      <div class="page-title">CD Tracks</div>
+      <div class="page-subtitle">Find a track, preview it to confirm it's the right one, then copy the link into a homework note</div>
+    </div>
+    <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+      <select class="form-select" id="cdtrack-cd-sel" onchange="onCdTrackCdChange()" style="min-width:180px;">
+        <option value="">Select a CD…</option>
+        ${Object.keys(CD_TRACKS).map(cd => `<option value="${escAttr(cd)}">${escHtml(cd)}</option>`).join('')}
+      </select>
+      <select class="form-select" id="cdtrack-track-sel" onchange="onCdTrackTrackChange()" disabled style="min-width:340px;">
+        <option value="">Select a track…</option>
+      </select>
+    </div>
+    <div id="cdtrack-preview-area"></div>
+  `;
+  document.getElementById('content-area').innerHTML = html;
+}
+
+function onCdTrackCdChange() {
+  const cd = document.getElementById('cdtrack-cd-sel')?.value;
+  const trackSel = document.getElementById('cdtrack-track-sel');
+  document.getElementById('cdtrack-preview-area').innerHTML = '';
+  if (!cd || !CD_TRACKS[cd]) {
+    trackSel.innerHTML = '<option value="">Select a track…</option>';
+    trackSel.disabled = true;
+    return;
+  }
+  trackSel.disabled = false;
+  trackSel.innerHTML = '<option value="">Select a track…</option>' +
+    CD_TRACKS[cd].map(t => `<option value="${escAttr(t.id)}">Track ${t.num}: ${escHtml(t.label)}</option>`).join('');
+}
+
+function onCdTrackTrackChange() {
+  const trackId = document.getElementById('cdtrack-track-sel')?.value;
+  const area = document.getElementById('cdtrack-preview-area');
+  if (!trackId) { area.innerHTML = ''; return; }
+  const link = `https://drive.google.com/file/d/${trackId}/view`;
+  area.innerHTML = `
+    <div class="card" style="max-width:600px;">
+      <iframe src="https://drive.google.com/file/d/${trackId}/preview" width="100%" height="80" style="border:none; border-radius:var(--radius-sm);" allow="autoplay"></iframe>
+      <div style="display:flex; gap:8px; margin-top:12px; align-items:center;">
+        <input type="text" class="form-input" id="cdtrack-link-box" readonly value="${escAttr(link)}" style="flex:1; font-size:12px; color:var(--ink-mid);"/>
+        <button class="btn btn-primary btn-sm" onclick="copyCdTrackLink()">📋 Copy Link</button>
+      </div>
+    </div>
+  `;
+}
+
+function copyCdTrackLink() {
+  const box = document.getElementById('cdtrack-link-box');
+  if (!box) return;
+  box.select();
+  navigator.clipboard.writeText(box.value).then(() => {
+    showToast('Link copied!', 'success');
+  }).catch(() => {
+    document.execCommand('copy');
+    showToast('Link copied!', 'success');
+  });
 }
 
 function renderTemplates() {
