@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-06.2';
+const APP_VERSION = 'v2026-09-06.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1765,7 +1765,7 @@ async function renderDashboard() {
       <div style="background:var(--orange-light); border-left:4px solid var(--orange); border-radius:var(--radius-md); padding:10px 16px; margin-bottom:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
         <div>
           <div style="font-size:11px; font-weight:700; color:var(--orange-dark); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px;">📢 Message from Admin</div>
-          <div style="font-size:13px; color:var(--ink-mid); line-height:1.6;">${escHtml(_motd)}</div>
+          <div style="font-size:13px; color:var(--ink-mid); line-height:1.6;">${nl2br(escHtml(_motd))}</div>
           ${_motdDate ? `<div style="font-size:11px; color:var(--ink-light); margin-top:4px;">${escHtml(_motdDate)}</div>` : ''}
         </div>
       </div>
@@ -4328,7 +4328,7 @@ function renderAttributesPortal() {
         <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
           Shown as a highlighted banner on the Dashboard for all staff. Leave blank to hide.
         </div>
-        <textarea class="form-textarea" id="motd-text" rows="3" placeholder="e.g. Reminder: Spring-2026 attendance due by Friday…" style="margin-bottom:10px;">${escHtml(DB.getSettings().motd || '')}</textarea>
+        <textarea class="form-textarea" id="motd-text" rows="8" placeholder="e.g. Reminder: Spring-2026 attendance due by Friday…" style="margin-bottom:10px;">${escHtml(DB.getSettings().motd || '')}</textarea>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary btn-sm" onclick="saveMotd()">💾 Save</button>
           <button class="btn btn-secondary btn-sm" onclick="clearMotd()">✕ Clear</button>
@@ -4340,7 +4340,7 @@ function renderAttributesPortal() {
         <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
           Shown to Active students in the parent portal. Leave blank to show a Hindi quote of the day.
         </div>
-        <textarea class="form-textarea" id="active-student-msg-text" rows="3"
+        <textarea class="form-textarea" id="active-student-msg-text" rows="8"
           placeholder="e.g. Welcome back! Classes resume Saturday September 6."
           style="margin-bottom:10px;">${escHtml(DB.getSettings().activeStudentMessage || '')}</textarea>
         <div style="display:flex; gap:8px;">
@@ -7367,7 +7367,7 @@ function loadViewerScreen() {
     bannerEl.innerHTML = _motd ? `
       <div style="background:var(--orange-light); border-left:4px solid var(--orange); border-radius:var(--radius-md); padding:10px 16px; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; color:var(--orange-dark); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px;">📢 Message from Admin</div>
-        <div style="font-size:13px; color:var(--ink-mid); line-height:1.6;">${escHtml(_motd)}</div>
+        <div style="font-size:13px; color:var(--ink-mid); line-height:1.6;">${nl2br(escHtml(_motd))}</div>
         ${_motdDate ? `<div style="font-size:11px; color:var(--ink-light); margin-top:4px;">${escHtml(_motdDate)}</div>` : ''}
       </div>` : '';
   }
@@ -8465,6 +8465,12 @@ function autoLinkUrls(escapedText) {
     /(https?:\/\/[^\s<]+)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--orange); word-break:break-all;">$1</a>'
   );
+}
+
+// Turns newline characters in already-escaped text into actual line breaks.
+// Must be called AFTER escHtml(), same safe-ordering reasoning as autoLinkUrls().
+function nl2br(escapedText) {
+  return String(escapedText || '').replace(/\n/g, '<br>');
 }
 
 </script>
