@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-04.3';
+const APP_VERSION = 'v2026-09-06.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2591,10 +2591,27 @@ function openStudentModal(studentId) {
   const openSessForInProcess = s.status === 'In-Process'
     ? DB.getSessions().find(sess => sess.enrollmentOpen)
     : null;
-  const enrolledSessions = sessions.filter(sess =>
+  let enrolledSessions = sessions.filter(sess =>
     sessionData.some(d => d.session === sess.name) ||
     (openSessForInProcess && sess.name === openSessForInProcess.name)
   );
+
+  // Sort most-recent-first, using the session NAME itself (not array position
+  // or the stored year field) — robust regardless of the order sessions were
+  // added in. Spring-YYYY belongs to the academic cycle started by
+  // Fall-(YYYY-1), so it's grouped with the previous year for sorting.
+  enrolledSessions = enrolledSessions.slice().sort((a, b) => {
+    const key = (name) => {
+      const m = name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+      if (!m) return [9999, 9];
+      const termOrder = { Fall: 0, Winter: 1, Spring: 2 }[m[1]];
+      let year = parseInt(m[2], 10);
+      if (m[1] === 'Spring') year -= 1;
+      return [year, termOrder];
+    };
+    const [ay, at] = key(a.name), [by, bt] = key(b.name);
+    return (by - ay) || (bt - at); // descending — most recent first
+  });
 
   // Build session tab content
   const sessTabContent = enrolledSessions.map(sess => {
@@ -2925,7 +2942,7 @@ function openStudentModal(studentId) {
             ? `<div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:14px 18px; font-size:13px; color:var(--ink-light);">No session enrolments yet.</div>`
             : `<div class="tabs" id="sess-tabs">
                 ${enrolledSessions.map((sess, i) => `
-                  <button class="tab-btn ${i===enrolledSessions.length-1?'active':''}" data-session="${escAttr(sess.name)}" onclick="switchSessTab('${sess.name}')">${sess.name}</button>
+                  <button class="tab-btn ${i===0?'active':''}" data-session="${escAttr(sess.name)}" onclick="switchSessTab('${sess.name}')">${sess.name}</button>
                 `).join('')}
               </div>
               ${sessTabContent}`
@@ -2947,7 +2964,7 @@ function openStudentModal(studentId) {
   }
 
   // Open last session tab by default
-  if (enrolledSessions.length > 0) switchSessTab(enrolledSessions[enrolledSessions.length - 1].name);
+  if (enrolledSessions.length > 0) switchSessTab(enrolledSessions[0].name);
 
   // Auto-fill book number from class level mapping for any session missing it
   setTimeout(() => {
