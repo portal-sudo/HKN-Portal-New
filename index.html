@@ -805,14 +805,14 @@ const SessionEngine = {
     return this.getTermFromDate(new Date());
   },
   getActiveSession() {
-    const sessions = DB.getSessions();
+    const sessions = sortSessionsChronological(DB.getSessions());
     const open = sessions.find(s => s.enrollmentOpen);
     if (open) return open;
     const cur = this.getCurrentSession();
-    return sessions.find(s => s.name === cur.name) || sessions[sessions.length - 1];
+    return sessions.find(s => s.name === cur.name) || sessions[0];
   },
   getUnderwaySession() {
-    const sessions = DB.getSessions();
+    const sessions = sortSessionsChronological(DB.getSessions());
     const today = new Date().toISOString().slice(0,10);
     const underway = sessions.find(s => {
       const dates = s.classDates || [];
@@ -828,7 +828,7 @@ const SessionEngine = {
     const openSess = sessions.find(s => s.enrollmentOpen);
     if (openSess) return openSess;
     const started = sessions.filter(s => (s.classDates||[]).length && s.classDates[0] <= today);
-    return started.length ? started[started.length - 1] : sessions[sessions.length - 1];
+    return started.length ? started[0] : sessions[0];
   },
   buildSessionName(term, year) { return `${term}-${year}`; },
 };
@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-06.1';
+const APP_VERSION = 'v2026-09-06.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2332,7 +2332,7 @@ function confirmSetAlumni() {
 
 // ── DIRECTORY ────────────────────────────────────────────────
 function renderDirectory() {
-  const sessions = DB.getSessions();
+  const sessions = sortSessionsChronological(DB.getSessions());
   const teachers = DB.getTeachers();
   const classLevels = DB.getClassLevels();
   const isAdmin  = currentUser.role === 'admin';
@@ -2596,22 +2596,8 @@ function openStudentModal(studentId) {
     (openSessForInProcess && sess.name === openSessForInProcess.name)
   );
 
-  // Sort most-recent-first, using the session NAME itself (not array position
-  // or the stored year field) — robust regardless of the order sessions were
-  // added in. Spring-YYYY belongs to the academic cycle started by
-  // Fall-(YYYY-1), so it's grouped with the previous year for sorting.
-  enrolledSessions = enrolledSessions.slice().sort((a, b) => {
-    const key = (name) => {
-      const m = name.match(/^(Fall|Winter|Spring)-(\d{4})/);
-      if (!m) return [9999, 9];
-      const termOrder = { Fall: 0, Winter: 1, Spring: 2 }[m[1]];
-      let year = parseInt(m[2], 10);
-      if (m[1] === 'Spring') year -= 1;
-      return [year, termOrder];
-    };
-    const [ay, at] = key(a.name), [by, bt] = key(b.name);
-    return (by - ay) || (bt - at); // descending — most recent first
-  });
+  // Sort most-recent-first — see sortSessionsChronological() for details
+  enrolledSessions = sortSessionsChronological(enrolledSessions);
 
   // Build session tab content
   const sessTabContent = enrolledSessions.map(sess => {
@@ -3725,8 +3711,8 @@ function feesSendReminders() {
 // ── SESSIONS PAGE ─────────────────────────────────────────────
 function renderClasses() {
   const isAdmin   = currentUser.role === 'admin';
-  const sessions  = DB.getSessions();
-  const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
+  const sessions  = sortSessionsChronological(DB.getSessions());
+  const activeSess = SessionEngine.getActiveSession() || sessions[0];
 
   // Pre-select Teacher/Class Level if arriving from a Dashboard row click
   // (one-time use — cleared immediately so it doesn't stick on later visits)
@@ -5402,7 +5388,7 @@ async function logInventoryTeacherCopy(sess) {
 // ── BACKUP PAGE ──────────────────────────────────────────────
 function renderBackup() {
   const students = DB.getStudents();
-  const sessions = DB.getSessions();
+  const sessions = sortSessionsChronological(DB.getSessions());
   const html = `
     <div class="page-header">
       <div class="page-title">Backup & restore</div>
@@ -6710,6 +6696,27 @@ function naturalCompare(a, b) {
   return 0;
 }
 
+// Sorts session objects most-recent-first, using each session's NAME
+// directly (not array position or the stored year field) — robust
+// regardless of the order sessions exist in DB.getSessions(), which can
+// vary once historical sessions have been imported out of chronological
+// order. Spring-YYYY belongs to the academic cycle started by
+// Fall-(YYYY-1), so it's grouped with the previous year for sorting.
+function sortSessionsChronological(sessionList) {
+  const key = (name) => {
+    const m = (name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+    if (!m) return [9999, 9];
+    const termOrder = { Fall: 0, Winter: 1, Spring: 2 }[m[1]];
+    let year = parseInt(m[2], 10);
+    if (m[1] === 'Spring') year -= 1;
+    return [year, termOrder];
+  };
+  return sessionList.slice().sort((a, b) => {
+    const [ay, at] = key(a.name), [by, bt] = key(b.name);
+    return (by - ay) || (bt - at); // descending — most recent first
+  });
+}
+
 // ── CD TRACKS ──────────────────────────────────────────────────
 function renderCdTracks() {
   const html = `
@@ -6990,7 +6997,7 @@ function setHomeworkDone(sessName, date, val, selectEl) {
 
 // ── ATTENDANCE MARKING SCREEN ─────────────────────────────────
 function renderAttendance() {
-  const sessions  = DB.getSessions();
+  const sessions  = sortSessionsChronological(DB.getSessions());
   const teachers  = DB.getTeachers();
   const isAdmin   = currentUser.role === 'admin';
   const activeSess = SessionEngine.getUnderwaySession();
