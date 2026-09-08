@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-06.6';
+const APP_VERSION = 'v2026-09-07.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4166,10 +4166,61 @@ function renderSessionCard(sess) {
 
 function toggleEnrollment(name) {
   const sess = DB.getSession(name);
+  const opening = !sess.enrollmentOpen;
+
+  if (opening) {
+    const otherOpen = DB.getSessions().find(s => s.enrollmentOpen && s.name !== name);
+    if (otherOpen) {
+      showModal(`<div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+          <div class="modal-title">⚠️ Another session is open</div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:13px; color:var(--ink-mid); line-height:1.6;">
+            <strong>${escHtml(otherOpen.name)}</strong> is currently open for enrollment.
+            Having two sessions open at the same time can cause confusing behavior elsewhere
+            in the portal, like Roll Forward not working correctly. We recommend closing
+            ${escHtml(otherOpen.name)} first.
+          </div>
+        </div>
+        <div class="modal-footer" style="flex-wrap:wrap; gap:8px;">
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-secondary" onclick="_forceOpenEnrollment('${escAttr(name)}')" style="color:var(--warning);">Open anyway</button>
+          <button class="btn btn-primary" onclick="_closeOtherAndOpen('${escAttr(otherOpen.name)}','${escAttr(name)}')">
+            Close ${escHtml(otherOpen.name)} &amp; open ${escHtml(name)}
+          </button>
+        </div>
+      </div>`);
+      return;
+    }
+  }
+
   sess.enrollmentOpen = !sess.enrollmentOpen;
   DB.saveSession(sess);
   renderSessions();
   showToast(`Enrollment ${sess.enrollmentOpen ? 'opened' : 'closed'} for ${name}`, 'success');
+}
+
+function _closeOtherAndOpen(otherName, name) {
+  const other = DB.getSession(otherName);
+  const sess  = DB.getSession(name);
+  other.enrollmentOpen = false;
+  DB.saveSession(other);
+  sess.enrollmentOpen = true;
+  DB.saveSession(sess);
+  closeModal();
+  renderSessions();
+  showToast(`Closed ${otherName}, opened ${name}`, 'success');
+}
+
+function _forceOpenEnrollment(name) {
+  const sess = DB.getSession(name);
+  sess.enrollmentOpen = true;
+  DB.saveSession(sess);
+  closeModal();
+  renderSessions();
+  showToast(`Enrollment opened for ${name} (another session is also still open)`, 'success');
 }
 
 function openSessionModal(name) {
