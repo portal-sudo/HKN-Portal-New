@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-10.3';
+const APP_VERSION = 'v2026-09-10.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4452,6 +4452,19 @@ function renderAttributesPortal() {
         </div>
       </div>
     </div>
+    <div class="card" style="border-color:var(--orange); border-width:1.5px; margin-bottom:16px;">
+      <div class="card-title">📝 Interest Confirmation Message</div>
+      <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
+        Shown to parents right after they submit an interest form (the student's name is shown separately, above this text — no need to repeat it here). Leave blank to use a default message.
+      </div>
+      <textarea class="form-textarea" id="interest-confirm-msg-text" rows="4"
+        placeholder="e.g. Fall-2026 enrollment is now closed. We will contact you when enrollment opens for Fall-2027."
+        style="margin-bottom:10px;">${escHtml(DB.getSettings().interestConfirmationMessage || '')}</textarea>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="saveInterestConfirmMsg()">💾 Save</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearInterestConfirmMsg()">✕ Clear</button>
+      </div>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
       <!-- Parent Portal Access -->
       <div class="card" style="border-color:var(--olive); border-width:1.5px;">
@@ -5043,6 +5056,23 @@ function clearActiveStudentMsg() {
   const el = document.getElementById('active-student-msg-text');
   if (el) el.value = '';
   showToast('Student portal message cleared', 'success');
+}
+
+function saveInterestConfirmMsg() {
+  const text = document.getElementById('interest-confirm-msg-text')?.value.trim() || '';
+  const settings = DB.getSettings();
+  settings.interestConfirmationMessage = text;
+  DB.saveSettings(settings);
+  showToast(text ? 'Interest confirmation message saved' : 'Interest confirmation message cleared', 'success');
+}
+
+function clearInterestConfirmMsg() {
+  const settings = DB.getSettings();
+  settings.interestConfirmationMessage = '';
+  DB.saveSettings(settings);
+  const el = document.getElementById('interest-confirm-msg-text');
+  if (el) el.value = '';
+  showToast('Interest confirmation message cleared', 'success');
 }
 
 function addTeacher() {
@@ -5819,6 +5849,7 @@ const SupabaseSync = {
         intakeEnabled:        sr.intake_enabled,
         staffEnabled:         sr.staff_enabled,
         activeStudentMessage: sr.active_student_message,
+        interestConfirmationMessage: sr.interest_confirmation_message,
         inactivityMinutes:    sr.inactivity_minutes ?? 45,
       };
 
@@ -6013,6 +6044,7 @@ const SupabaseSync = {
       intake_enabled:         obj.intakeEnabled        ?? false,
       staff_enabled:          obj.staffEnabled         ?? false,
       active_student_message: obj.activeStudentMessage ?? null,
+      interest_confirmation_message: obj.interestConfirmationMessage ?? null,
       inactivity_minutes:     obj.inactivityMinutes    ?? 45,
     }], { onConflict: 'id' });
     if (error) console.warn('upsertSettings:', error.message);
@@ -8421,13 +8453,13 @@ function renderIntakeConfirmation(student) {
     <div style="text-align:center; margin-bottom:20px;">
       <div style="font-size:48px; margin-bottom:8px;">${isInterest ? '📝' : '🎉'}</div>
       <div style="font-family:var(--serif); font-size:24px; font-weight:600; color:var(--olive);">
-        ${isInterest ? 'Interest registered!' : 'Thank you!'}
+        ${isInterest ? `Interest registered for ${escHtml(student.firstName)}!` : 'Thank you!'}
       </div>
     </div>
     ${isInterest ? `
       <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px;">
-        Thank you for registering your interest for <strong>${student.firstName} ${student.lastName}</strong>.
-        The HKN team will review your application and reach out by email when a spot becomes available.
+        ${nl2br(escHtml(DB.getSettings().interestConfirmationMessage ||
+          'The HKN team will review your application and reach out by email when a spot becomes available.'))}
       </div>
     ` : `
       <div style="font-size:14px; color:var(--ink-mid); margin-bottom:12px;">
