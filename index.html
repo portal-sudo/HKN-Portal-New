@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-10.5';
+const APP_VERSION = 'v2026-09-10.6';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2705,7 +2705,7 @@ function openStudentModal(studentId) {
               ${sess.classDates.map(date => {
                 const att = (sd.attendance || {})[date] || 'unmarked';
                 const colors = { present:'var(--success)', absent:'var(--danger)', vacation:'var(--warning)', unmarked:'var(--ink-light)' };
-                const labels = { present:'P', absent:'A', vacation:'V', unmarked:'?' };
+                const labels = { present:'P', absent:'A', vacation:'E', unmarked:'?' };
                 const canMark = isAdmin || teacherCanEdit;
                 return `<div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
                   <div style="font-size:10px; color:var(--ink-light);">${date.slice(5)}</div>
@@ -2715,7 +2715,7 @@ function openStudentModal(studentId) {
                       <option value="unmarked" ${att==='unmarked'?'selected':''}>?</option>
                       <option value="present"  ${att==='present' ?'selected':''}>P ✓</option>
                       <option value="absent"   ${att==='absent'  ?'selected':''}>A ✗</option>
-                      <option value="vacation" ${att==='vacation'?'selected':''}>V ~</option>
+                      <option value="vacation" ${att==='vacation'?'selected':''}>E ~</option>
                     </select>` : `
                     <div style="width:52px; height:28px; border-radius:6px; border:1.5px solid ${colors[att]}; color:${colors[att]}; background:white; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center;">${labels[att]}</div>`}
                 </div>`;
@@ -2724,7 +2724,7 @@ function openStudentModal(studentId) {
             <div style="display:flex; gap:12px; margin-top:8px; font-size:11px; color:var(--ink-light);">
               <span style="color:var(--success);">P = Present</span>
               <span style="color:var(--danger);">A = Absent</span>
-              <span style="color:var(--warning);">V = Vacation (pre-informed)</span>
+              <span style="color:var(--warning);">E = Excused</span>
               <span>? = Unmarked</span>
             </div>
           </div>
@@ -7307,7 +7307,7 @@ function loadAttendanceClass() {
     const isOwn = !isTeacherRole || (sd.teacher || '').toLowerCase().includes(
       (currentUser.name || '').split(' ')[0].toLowerCase()
     );
-    const attLabel = { present: '✓ Present', absent: '✗ Absent', vacation: '~ Vacation', unmarked: '— Unmarked' };
+    const attLabel = { present: '✓ Present', absent: '✗ Absent', vacation: '~ Excused', unmarked: '— Unmarked' };
     const hwLabel = { yes: '✓ Yes', no: '✗ No', unknown: '— Unmarked' };
     const nameKey = `${s.firstName} ${s.lastName}`.trim().toLowerCase();
     const isDuplicateName = nameCounts[nameKey] > 1;
@@ -7342,7 +7342,7 @@ function loadAttendanceClass() {
               style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600; border:1.5px solid; cursor:pointer;
                 background:${att==='vacation'?'var(--warning)':'white'};
                 color:${att==='vacation'?'white':'var(--warning)'};
-                border-color:var(--warning);">~ Vacation</button>
+                border-color:var(--warning);">~ Excused</button>
           </div>` : `<span style="font-size:12px; color:var(--ink-light);">${attLabel[att] || att}</span>`}
         </td>
         <td>
@@ -7699,7 +7699,7 @@ function renderIntakeInfoView(student, currentSess) {
               <div style="display:flex; gap:16px; margin-top:10px; font-size:12px;">
                 <span style="color:var(--success);">✓ Present: ${present}</span>
                 <span style="color:var(--danger);">✗ Absent: ${absent}</span>
-                <span style="color:var(--warning);">~ Vacation: ${vacation}</span>
+                <span style="color:var(--warning);">~ Excused: ${vacation}</span>
                 ${pastDates.length - present - absent - vacation > 0 ? `<span style="color:var(--ink-light);">? Unmarked: ${pastDates.length - present - absent - vacation}</span>` : ''}
               </div>
             ` : ''}
