@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-07.2';
+const APP_VERSION = 'v2026-09-07.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2401,7 +2401,7 @@ function renderStudentTable() {
   let students = DB.searchStudents({ name, session, status, teacher, classLevel });
 
   // Sort
-  const activeSessForSort = SessionEngine.getUnderwaySession();
+  const activeSessForSort = SessionEngine.getActiveSession();
   const sesKeySort = session || activeSessForSort?.name || '';
   const dir = currentSort.dir === 'asc' ? 1 : -1;
   students = students.slice().sort((a, b) => {
@@ -2471,7 +2471,7 @@ function renderStudentTable() {
   const th = (col, label) => `<th style="${thStyle}" onclick="setSort('${col}')">${label}${arrow(col)}</th>`;
   const thPlain = (label) => `<th style="white-space:nowrap;">${label}</th>`;
 
-  const activeSess = SessionEngine.getUnderwaySession();
+  const activeSess = SessionEngine.getActiveSession();
 
   const thead = document.getElementById('dir-thead-row');
   if (thead) thead.innerHTML =
@@ -2567,7 +2567,7 @@ function openStudentModal(studentId) {
   const classLevels = DB.getClassLevels();
   const bookLevels = DB.getBookLevels();
   const classTimes = DB.getClassTimes();
-  const activeSess = SessionEngine.getUnderwaySession();
+  const activeSess = SessionEngine.getActiveSession();
 
   const s = student || { status:'Interest', sessionData:[] };
   const sessionData = s.sessionData || [];
@@ -2604,7 +2604,7 @@ function openStudentModal(studentId) {
     const sessObj = DB.getSession(sess.name) || sess;
     sess.classDates = sessObj.classDates || sess.classDates || [];
     const k = sess.name.replace(/[^a-z0-9]/gi, '_'); // sanitized key — must match saveStudentModal
-    const isCurrentSess = SessionEngine.getUnderwaySession()?.name === sess.name;
+    const isCurrentSess = SessionEngine.getActiveSession()?.name === sess.name;
     // Teacher can ONLY edit scores + notes for their OWN students in current session
     const isOwnStudent   = currentUser.role === 'teacher' &&
       (sd.teacher || '').toLowerCase().includes(currentUser.name.split(' ')[0].toLowerCase());
@@ -7498,8 +7498,10 @@ async function showPublicIntake() {
     if (step1) step1.style.opacity = '1';
     if (error) throw error;
 
-    // Store for use by _intakeLookupCore() — avoids a second network call
-    intakeState.sessions             = data?.sessions || [];
+    // Store for use by _intakeLookupCore() — avoids a second network call.
+    // Sorted immediately since the database doesn't guarantee any particular
+    // order, and downstream logic (getBestSession) relies on most-recent-first.
+    intakeState.sessions             = sortSessionsChronological(data?.sessions || []);
     intakeState.activeStudentMessage = data?.activeStudentMessage || '';
 
     if (data?.intakeEnabled === false) {
@@ -7762,7 +7764,7 @@ async function _intakeLookupCore() {
         if (underway) return underway;
         const studentSessNames = new Set((student.sessionData||[]).map(sd => sd.session));
         const withData = sessions.filter(s => studentSessNames.has(s.name));
-        return withData.length ? withData[withData.length - 1] : sessions[sessions.length - 1];
+        return withData.length ? withData[0] : sessions[0];
       };
 
       // ── Case 1: Active ────────────────────────────────────────
