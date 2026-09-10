@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-10.4';
+const APP_VERSION = 'v2026-09-10.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7588,6 +7588,7 @@ async function showPublicIntake() {
     // order, and downstream logic (getBestSession) relies on most-recent-first.
     intakeState.sessions             = sortSessionsChronological(data?.sessions || []);
     intakeState.activeStudentMessage = data?.activeStudentMessage || '';
+    intakeState.interestConfirmationMessage = data?.interestConfirmationMessage || '';
 
     if (data?.intakeEnabled === false) {
       if (step1) step1.innerHTML = `
@@ -8458,7 +8459,7 @@ function renderIntakeConfirmation(student) {
     </div>
     ${isInterest ? `
       <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px;">
-        ${nl2br(escHtml(DB.getSettings().interestConfirmationMessage ||
+        ${nl2br(escHtml(intakeState.interestConfirmationMessage ||
           'The HKN team will review your application and reach out by email when a spot becomes available.'))}
       </div>
     ` : `
