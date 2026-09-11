@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-10.6';
+const APP_VERSION = 'v2026-09-10.7';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4149,7 +4149,25 @@ function loadScoringGuideSection() {
 }
 
 function renderSessions() {
-  const sessions = DB.getSessions();
+  const sessions = sortSessionsChronological(DB.getSessions());
+
+  // Group into academic years — same rule as the student modal's session
+  // tabs: Fall-Y/Winter-Y/Spring-(Y+1) belong together under "Y".
+  const _academicYearOf = (name) => {
+    const m = (name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+    if (!m) return 0;
+    let year = parseInt(m[2], 10);
+    if (m[1] === 'Spring') year -= 1;
+    return year;
+  };
+  const yearGroups = {};
+  sessions.slice().reverse().forEach(sess => {
+    const yr = _academicYearOf(sess.name);
+    (yearGroups[yr] = yearGroups[yr] || []).push(sess);
+  });
+  const sortedYears = Object.keys(yearGroups).map(Number).sort((a, b) => a - b);
+  const currentYear = sessions.length > 0 ? _academicYearOf(SessionEngine.getActiveSession()?.name || sessions[0].name) : null;
+
   const html = `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
       <div>
@@ -4158,11 +4176,29 @@ function renderSessions() {
       </div>
       ${currentUser.role === 'admin' ? `<button class="btn btn-primary" onclick="openSessionModal(null)">➕ Add session</button>` : ''}
     </div>
-    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
-      ${sessions.map(sess => renderSessionCard(sess)).join('')}
-    </div>
+    ${sortedYears.length === 0 ? `<div style="color:var(--ink-light);">No sessions yet.</div>` : `
+      <div class="tabs" id="sessions-year-tabs" style="margin-bottom:16px;">
+        ${sortedYears.map(yr => `
+          <button class="tab-btn ${yr===currentYear?'active':''}" data-year="${yr}" onclick="switchSessionsPageYear(${yr})">${yr}</button>
+        `).join('')}
+      </div>
+      ${sortedYears.map(yr => `
+        <div id="sessions-year-group-${yr}" class="sessions-year-group ${yr===currentYear?'':'hidden'}">
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+            ${yearGroups[yr].map(sess => renderSessionCard(sess)).join('')}
+          </div>
+        </div>
+      `).join('')}
+    `}
   `;
   document.getElementById('content-area').innerHTML = html;
+}
+
+function switchSessionsPageYear(year) {
+  document.querySelectorAll('#sessions-year-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sessions-year-group').forEach(g => g.classList.add('hidden'));
+  document.querySelector(`#sessions-year-tabs .tab-btn[data-year="${year}"]`)?.classList.add('active');
+  document.getElementById(`sessions-year-group-${year}`)?.classList.remove('hidden');
 }
 
 function renderSessionCard(sess) {
