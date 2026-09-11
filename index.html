@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-10.7';
+const APP_VERSION = 'v2026-09-11.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4204,6 +4204,11 @@ function switchSessionsPageYear(year) {
 function renderSessionCard(sess) {
   const isAdmin = currentUser.role === 'admin';
   const isCurrent = SessionEngine.getActiveSession().name === sess.name;
+  const _dates = sess.classDates || [];
+  const _fmtShort = (dateStr) => new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  const _specialDateNote = _dates.length === 0 ? '' :
+    sess.term === 'Fall'   ? `${_fmtShort(_dates[0])} - Orientation Day` :
+    sess.term === 'Spring' ? `${_fmtShort(_dates[_dates.length-1])} - Year-End Celebration` : '';
   return `
     <div class="card" style="${isCurrent ? 'border-color:var(--orange); border-width:2px;' : ''}">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
@@ -4226,6 +4231,7 @@ function renderSessionCard(sess) {
           <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
             <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Class days</div>
             <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">${sess.classDates?.length || 0}</div>
+            ${_specialDateNote ? `<div style="font-size:11px; color:var(--ink-light); margin-top:2px;">${_specialDateNote}</div>` : ''}
           </div>
         </div>
       ` : `
@@ -4237,6 +4243,7 @@ function renderSessionCard(sess) {
           <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px;">
             <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em;">Class days</div>
             <div style="font-family:var(--serif); font-size:22px; color:var(--olive);">${sess.classDates?.length || 0}</div>
+            ${_specialDateNote ? `<div style="font-size:11px; color:var(--ink-light); margin-top:2px;">${_specialDateNote}</div>` : ''}
           </div>
         </div>
       `}
