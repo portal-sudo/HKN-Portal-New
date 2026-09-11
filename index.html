@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-11.2';
+const APP_VERSION = 'v2026-09-11.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2349,9 +2349,41 @@ function renderDirectory() {
     </div>
     <div class="filter-bar">
       <input type="text" class="form-input" id="filter-search" placeholder="🔍  Search name, ID, notes…" oninput="renderStudentTable()" value="${currentStudentFilter.name||''}"/>
-      <select class="form-select" id="filter-session" onchange="renderStudentTable()">
+      <select class="form-select" id="filter-session-year" onchange="onSessionYearChange()">
         <option value="">All sessions</option>
-        ${sessions.map(s => `<option value="${s.name}" ${currentStudentFilter.session===s.name?'selected':''}>${s.name}</option>`).join('')}
+        ${(() => {
+          const yearMap = {};
+          sessions.forEach(s => {
+            const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+            if (!m) return;
+            let yr = parseInt(m[2], 10);
+            if (m[1] === 'Spring') yr -= 1;
+            (yearMap[yr] = yearMap[yr] || []).push(s);
+          });
+          const yrs = Object.keys(yearMap).map(Number).sort((a,b) => b - a); // most-recent-first
+          const selMatch = sessions.find(s => s.name === currentStudentFilter.session);
+          let selYear = '';
+          if (selMatch) {
+            const m = selMatch.name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+            selYear = m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10);
+          }
+          return yrs.map(yr => `<option value="${yr}" ${selYear===yr?'selected':''}>${yr}</option>`).join('');
+        })()}
+      </select>
+      <select class="form-select" id="filter-session-term" onchange="onSessionTermChange()">
+        ${(() => {
+          const selMatch = sessions.find(s => s.name === currentStudentFilter.session);
+          if (!selMatch) return `<option value="" disabled>—</option>`;
+          const m = selMatch.name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+          const selYear = m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10);
+          const termsInYear = sessions.filter(s => {
+            const sm = s.name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+            if (!sm) return false;
+            const sy = sm[1] === 'Spring' ? parseInt(sm[2],10) - 1 : parseInt(sm[2],10);
+            return sy === selYear;
+          });
+          return termsInYear.map(s => `<option value="${escAttr(s.name)}" ${currentStudentFilter.session===s.name?'selected':''}>${s.term}</option>`).join('');
+        })()}
       </select>
       <select class="form-select" id="filter-status" onchange="renderStudentTable()">
         <option value="">All statuses</option>
@@ -2388,9 +2420,52 @@ function setSort(col) {
   renderStudentTable();
 }
 
+// Handles the Year dropdown changing — rebuilds the Term dropdown's options
+// to just that year's sessions, trying to keep the same term selected if
+// it exists in the new year, otherwise falling back to the first available.
+function onSessionYearChange() {
+  const yearSel = document.getElementById('filter-session-year');
+  const termSel = document.getElementById('filter-session-term');
+  const year = yearSel?.value || '';
+
+  if (!year) {
+    // "All sessions" — no term filter applies
+    if (termSel) {
+      termSel.innerHTML = `<option value="" disabled>—</option>`;
+      termSel.disabled = true;
+    }
+    renderStudentTable();
+    return;
+  }
+
+  const prevTerm = termSel?.selectedOptions[0]?.textContent || '';
+  const sessions = DB.getSessions();
+  const termsInYear = sessions.filter(s => {
+    const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+    if (!m) return false;
+    const sy = m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10);
+    return sy === parseInt(year, 10);
+  });
+
+  if (termSel) {
+    termSel.disabled = false;
+    termSel.innerHTML = termsInYear.map(s =>
+      `<option value="${escAttr(s.name)}">${s.term}</option>`
+    ).join('');
+    // Try to keep the same term selected; otherwise default to the first available
+    const match = termsInYear.find(s => s.term === prevTerm);
+    termSel.value = match ? match.name : (termsInYear[0]?.name || '');
+  }
+  renderStudentTable();
+}
+
+function onSessionTermChange() {
+  renderStudentTable();
+}
+
 function renderStudentTable() {
   const name    = document.getElementById('filter-search')?.value || '';
-  const session = document.getElementById('filter-session')?.value || '';
+  const session = document.getElementById('filter-session-term')?.value || '';
   const status  = document.getElementById('filter-status')?.value || '';
   const teacher = document.getElementById('filter-teacher')?.value || '';
   const classLevel = document.getElementById('filter-level')?.value || '';
