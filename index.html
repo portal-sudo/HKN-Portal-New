@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-11.3';
+const APP_VERSION = 'v2026-09-11.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -3855,8 +3855,34 @@ function renderClasses() {
     </div>
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
       <label class="form-label" style="margin:0; white-space:nowrap;">Session</label>
-      <select class="form-select" id="classes-session-sel" onchange="renderClassCards()" style="max-width:200px;">
-        ${sessions.map(s => `<option value="${escHtml(s.name)}" ${s.name === activeSess?.name ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+      <select class="form-select" id="classes-session-year" onchange="onClassesSessionYearChange()" style="max-width:100px;">
+        ${(() => {
+          const yearMap = {};
+          sessions.forEach(s => {
+            const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+            if (!m) return;
+            let yr = parseInt(m[2], 10);
+            if (m[1] === 'Spring') yr -= 1;
+            (yearMap[yr] = yearMap[yr] || []).push(s);
+          });
+          const yrs = Object.keys(yearMap).map(Number).sort((a,b) => b - a);
+          const m = (activeSess?.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+          const selYear = m ? (m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10)) : yrs[0];
+          return yrs.map(yr => `<option value="${yr}" ${selYear===yr?'selected':''}>${yr}</option>`).join('');
+        })()}
+      </select>
+      <select class="form-select" id="classes-session-term" onchange="renderClassCards()" style="max-width:140px;">
+        ${(() => {
+          const m = (activeSess?.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+          const selYear = m ? (m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10)) : null;
+          const termsInYear = sessions.filter(s => {
+            const sm = s.name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+            if (!sm) return false;
+            const sy = sm[1] === 'Spring' ? parseInt(sm[2],10) - 1 : parseInt(sm[2],10);
+            return sy === selYear;
+          });
+          return termsInYear.map(s => `<option value="${escAttr(s.name)}" ${s.name===activeSess?.name?'selected':''}>${s.term}</option>`).join('');
+        })()}
       </select>
       <select class="form-select" id="classes-filter-teacher" onchange="renderClassCards()" style="max-width:200px;">
         <option value="">All teachers</option>
@@ -3873,9 +3899,34 @@ function renderClasses() {
   renderClassCards();
 }
 
+// Same cascading pattern as the Directory page's session filter — see
+// onSessionYearChange() for the original. No "All sessions" option here,
+// since Classes always needs exactly one session selected.
+function onClassesSessionYearChange() {
+  const yearSel = document.getElementById('classes-session-year');
+  const termSel = document.getElementById('classes-session-term');
+  const year = yearSel?.value || '';
+  const prevTerm = termSel?.selectedOptions[0]?.textContent || '';
+  const sessions = DB.getSessions();
+  const termsInYear = sessions.filter(s => {
+    const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+    if (!m) return false;
+    const sy = m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10);
+    return sy === parseInt(year, 10);
+  });
+  if (termSel) {
+    termSel.innerHTML = termsInYear.map(s =>
+      `<option value="${escAttr(s.name)}">${s.term}</option>`
+    ).join('');
+    const match = termsInYear.find(s => s.term === prevTerm);
+    termSel.value = match ? match.name : (termsInYear[0]?.name || '');
+  }
+  renderClassCards();
+}
+
 function renderClassCards() {
   const isAdmin  = currentUser.role === 'admin';
-  const sessName = document.getElementById('classes-session-sel')?.value;
+  const sessName = document.getElementById('classes-session-term')?.value;
   const area     = document.getElementById('classes-card-area');
   if (!area || !sessName) return;
 
@@ -7258,6 +7309,31 @@ function setHomeworkDone(sessName, date, val, selectEl) {
 }
 
 // ── ATTENDANCE MARKING SCREEN ─────────────────────────────────
+// Same cascading pattern as the Directory page's session filter — see
+// onSessionYearChange() for the original. No "All sessions" option here,
+// since Attendance always needs exactly one session selected.
+function onAttSessionYearChange() {
+  const yearSel = document.getElementById('att-session-year');
+  const sessSel = document.getElementById('att-session');
+  const year = yearSel?.value || '';
+  const prevTerm = sessSel?.selectedOptions[0]?.textContent || '';
+  const sessions = DB.getSessions();
+  const termsInYear = sessions.filter(s => {
+    const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+    if (!m) return false;
+    const sy = m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10);
+    return sy === parseInt(year, 10);
+  });
+  if (sessSel) {
+    sessSel.innerHTML = termsInYear.map(s =>
+      `<option value="${escAttr(s.name)}">${s.term}</option>`
+    ).join('');
+    const match = termsInYear.find(s => s.term === prevTerm);
+    sessSel.value = match ? match.name : (termsInYear[0]?.name || '');
+  }
+  loadAttendanceClass();
+}
+
 function renderAttendance() {
   const sessions  = sortSessionsChronological(DB.getSessions());
   const teachers  = DB.getTeachers();
@@ -7272,10 +7348,39 @@ function renderAttendance() {
 
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-        <div class="form-group" style="min-width:160px;">
+        <div class="form-group" style="min-width:90px;">
+          <label class="form-label">Year</label>
+          <select class="form-select" id="att-session-year" onchange="onAttSessionYearChange()">
+            ${(() => {
+              const yearMap = {};
+              sessions.forEach(s => {
+                const m = (s.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+                if (!m) return;
+                let yr = parseInt(m[2], 10);
+                if (m[1] === 'Spring') yr -= 1;
+                (yearMap[yr] = yearMap[yr] || []).push(s);
+              });
+              const yrs = Object.keys(yearMap).map(Number).sort((a,b) => b - a);
+              const m = (activeSess?.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+              const selYear = m ? (m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10)) : yrs[0];
+              return yrs.map(yr => `<option value="${yr}" ${selYear===yr?'selected':''}>${yr}</option>`).join('');
+            })()}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:130px;">
           <label class="form-label">Session</label>
           <select class="form-select" id="att-session" onchange="loadAttendanceClass()">
-            ${sessions.map(s => `<option value="${s.name}" ${s.name===activeSess?.name?'selected':''}>${s.name}</option>`).join('')}
+            ${(() => {
+              const m = (activeSess?.name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+              const selYear = m ? (m[1] === 'Spring' ? parseInt(m[2],10) - 1 : parseInt(m[2],10)) : null;
+              const termsInYear = sessions.filter(s => {
+                const sm = s.name.match(/^(Fall|Winter|Spring)-(\d{4})/);
+                if (!sm) return false;
+                const sy = sm[1] === 'Spring' ? parseInt(sm[2],10) - 1 : parseInt(sm[2],10);
+                return sy === selYear;
+              });
+              return termsInYear.map(s => `<option value="${escAttr(s.name)}" ${s.name===activeSess?.name?'selected':''}>${s.term}</option>`).join('');
+            })()}
           </select>
         </div>
         <div class="form-group" style="min-width:140px;">
