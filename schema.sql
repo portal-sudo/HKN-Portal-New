@@ -46,6 +46,12 @@
 -- client-side source (DB.getSettings(), only populated for logged-in
 -- staff) instead of the public RPC response, so the custom message
 -- never showed for anonymous parents until both were fixed together.
+-- Updated: September 2026 — added students_teacher_insert_for_upsert
+-- policy. Teachers' attendance-saving was silently failing entirely —
+-- the app saves via .upsert(), which requires a passing INSERT policy
+-- even when only the UPDATE path actually runs, and no such policy
+-- existed for teachers before this. See the policy's own comment below
+-- for the full explanation.
 --
 -- Run this top-to-bottom on ANY Supabase project — fresh or existing —
 -- to bring it fully up to date with everything below: tables,
@@ -616,6 +622,21 @@ drop policy if exists "students_teacher_update" on students;
 create policy "students_teacher_update"
   on students for update
   using (exists (select 1 from teachers where lower(email) = lower(auth.jwt() ->> 'email')))
+  with check (exists (select 1 from teachers where lower(email) = lower(auth.jwt() ->> 'email')));
+
+-- Added September 2026 — required for teachers' attendance-saving to
+-- work at all. The app saves attendance via .upsert(), which Postgres
+-- implements as INSERT ... ON CONFLICT DO UPDATE. Per Postgres's own
+-- documented behavior, this requires a passing INSERT policy to exist
+-- even when the row already exists and only the UPDATE path actually
+-- runs — students_teacher_update alone was not enough, and teachers'
+-- saves were silently failing with no client-side error at all. In
+-- practice teachers never create new student rows through the app's
+-- own UI, so this insert permission is never actually exercised for
+-- real; it exists purely to satisfy Postgres's structural requirement.
+drop policy if exists "students_teacher_insert_for_upsert" on students;
+create policy "students_teacher_insert_for_upsert"
+  on students for insert
   with check (exists (select 1 from teachers where lower(email) = lower(auth.jwt() ->> 'email')));
 
 drop policy if exists "students_admin_write" on students;
