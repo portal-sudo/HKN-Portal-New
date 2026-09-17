@@ -52,6 +52,13 @@
 -- even when only the UPDATE path actually runs, and no such policy
 -- existed for teachers before this. See the policy's own comment below
 -- for the full explanation.
+-- Updated: September 2026 — added update_own_presence() (also never
+-- previously recorded here, despite existing live since shortly after
+-- the policy above). Replaced the client's direct .upsert() to
+-- teacher_presence, which hit an intermittent RLS violation under
+-- certain timing conditions; also guards against a null auth email
+-- (seen when a session's token is briefly invalid), which previously
+-- caused a not-null constraint error instead of failing quietly.
 --
 -- Run this top-to-bottom on ANY Supabase project — fresh or existing —
 -- to bring it fully up to date with everything below: tables,
@@ -856,6 +863,37 @@ using (lower(email) = lower(auth.jwt() ->> 'email'))
 with check (lower(email) = lower(auth.jwt() ->> 'email'));
 
 grant select, insert, update on teacher_presence to authenticated;
+
+-- update_own_presence() — called every 60 seconds by the app's presence
+-- heartbeat while a logged-in session is open, to power the "last seen"/
+-- "active now" indicators on the Teacher Activity dashboard. Originally
+-- the client called teacher_presence directly via .upsert(), which hit
+-- an intermittent RLS violation under certain timing conditions; this
+-- function (SECURITY DEFINER, bypassing that RLS check) replaced it in
+-- September 2026. Only ever writes the caller's own email, taken from
+-- their own auth token — never a client-supplied value — so it can't be
+-- used to affect anyone else's row regardless of what a caller sends.
+-- Guards against a null email (seen when a session's auth token is
+-- briefly invalid, e.g. mid-refresh-token-failure) by skipping quietly
+-- instead of raising a not-null constraint violation.
+create or replace function update_own_presence()
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_email text;
+begin
+  v_email := lower(auth.jwt() ->> 'email');
+  if v_email is null then
+    return;
+  end if;
+  insert into teacher_presence (email, last_seen)
+  values (v_email, now())
+  on conflict (email) do update
+  set last_seen = now();
+end;
+$$;
 
 
 -- =====================================================================
