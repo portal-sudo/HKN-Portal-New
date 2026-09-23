@@ -118,7 +118,7 @@ a:hover { text-decoration: underline; }
   border-color: var(--orange); box-shadow: 0 0 0 3px rgba(242,125,38,0.1);
 }
 .form-input::placeholder { color: var(--ink-light); }
-.form-textarea { resize: vertical; min-height: 80px; }
+.form-textarea { resize: vertical; min-height: 80px; width: 100%; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
 
@@ -813,7 +813,7 @@ const SessionEngine = {
   },
   getUnderwaySession() {
     const sessions = sortSessionsChronological(DB.getSessions());
-    const today = new Date().toISOString().slice(0,10);
+    const today = _todayLocal();
     const underway = sessions.find(s => {
       const dates = s.classDates || [];
       if (!dates.length) return false;
@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-11.4';
+const APP_VERSION = 'v2026-09-14.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1507,10 +1507,7 @@ let _classesOverviewSort = { col: 'teacher', dir: 'asc' };
 async function _updatePresence() {
   if (!currentUser) return;
   try {
-    await _supabase.from('teacher_presence').upsert({
-      email: currentUser.email,
-      last_seen: new Date().toISOString(),
-    });
+    await _supabase.rpc('update_own_presence');
   } catch(e) {
     console.warn('_updatePresence:', e.message);
   }
@@ -2733,7 +2730,7 @@ function openStudentModal(studentId) {
             ${isAdmin ? `
               <div style="display:flex; gap:10px; margin-top:4px;">
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
-                  <input type="radio" name="fees_${k}" value="1" ${sd.feesPaid?'checked':''} id="sf-feesPaid_1_${k}" onchange="if(this.checked){const d=document.getElementById('sf-paymentDate_${k}');if(!d.value)d.value=new Date().toISOString().slice(0,10);}"/> Paid
+                  <input type="radio" name="fees_${k}" value="1" ${sd.feesPaid?'checked':''} id="sf-feesPaid_1_${k}" onchange="if(this.checked){const d=document.getElementById('sf-paymentDate_${k}');if(!d.value)d.value=_todayLocal();}"/> Paid
                 </label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
                   <input type="radio" name="fees_${k}" value="0" ${!sd.feesPaid?'checked':''}/> Pending
@@ -2765,7 +2762,8 @@ function openStudentModal(studentId) {
         <div class="form-group">
           <label class="form-label">Notes</label>
           ${isAdmin
-            ? `<textarea class="form-textarea" id="sf-notes_${k}" rows="4" style="overflow-y:auto;resize:vertical;">${escHtml(sd.notes||'')}</textarea>`
+            ? `<textarea class="form-textarea" id="sf-notes_${k}" rows="4" style="overflow-y:auto;resize:vertical;">${escHtml(sd.notes||'')}</textarea>
+               ${sd.notes ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px; color:var(--danger);" onclick="clearSessionNotes('${escAttr(s.id)}','${escAttr(sess.name)}')">🗑️ Clear notes</button>` : ''}`
             : teacherCanEdit ? `
               ${sd.notes ? `<div style="font-size:12px;color:var(--ink-mid);background:var(--cream-dark);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px;white-space:pre-wrap;max-height:80px;overflow-y:auto;">${autoLinkUrls(escHtml(sd.notes))}</div>` : ''}
               <input type="text" class="form-input" id="sf-notes-add_${k}" placeholder="Add a note…" style="font-size:12px;"/>
@@ -3117,6 +3115,28 @@ function switchSessYear(year) {
     const target = preActive || sessBtns[sessBtns.length - 1];
     if (target) switchSessTab(target.dataset.session);
   }
+}
+
+// Deliberate, explicit way to fully clear a session's notes — bypasses
+// saveStudentModal's own notes-save logic entirely (which intentionally
+// treats an empty textarea as "no change" to guard against accidental
+// data loss during normal editing). This button exists specifically for
+// the cases that protection makes otherwise impossible, like removing
+// test data.
+function clearSessionNotes(studentId, sessName) {
+  showConfirm('🗑️', 'Clear notes?',
+    'This will permanently delete all notes for this session. This cannot be undone.',
+    'Clear notes', 'btn-danger',
+    () => {
+      const s = DB.getStudent(studentId);
+      if (!s) return;
+      const sd = (s.sessionData || []).find(d => d.session === sessName);
+      if (sd) sd.notes = '';
+      DB.saveStudent(s);
+      showToast('Notes cleared', 'success');
+      openStudentModal(studentId);
+    }
+  );
 }
 
 function saveStudentModal(existingId) {
@@ -3738,7 +3758,7 @@ function openRefundDialog(studentId, currentSessName) {
       '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
         '<label style="font-size:13px;font-weight:500;">Date issued</label>' +
-        '<input type="date" id="refund-date" value="' + new Date().toISOString().slice(0,10) + '" style="padding:5px 8px;border:1px solid var(--olive-mid);border-radius:var(--radius-sm);font-size:13px;"/>' +
+        '<input type="date" id="refund-date" value="' + _todayLocal() + '" style="padding:5px 8px;border:1px solid var(--olive-mid);border-radius:var(--radius-sm);font-size:13px;"/>' +
       '</div>' +
     '</div>' +
     '<div class="modal-footer">' +
@@ -3769,7 +3789,7 @@ function confirmRefund() {
 
   const sessionsRefunded = Array.from(document.querySelectorAll('.refund-sess-cb:checked')).map(cb => cb.value);
   const amount  = parseFloat(document.getElementById('refund-amount')?.value) || 0;
-  const date    = document.getElementById('refund-date')?.value || new Date().toISOString().slice(0,10);
+  const date    = document.getElementById('refund-date')?.value || _todayLocal();
 
   if (sessionsRefunded.length === 0) { showToast('Please select at least one session', 'error'); return; }
 
@@ -5433,7 +5453,7 @@ async function renderInventory() {
   `;
 
   // Set default dates
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayLocal();
   document.getElementById('inv-rep-date').value = today;
   document.getElementById('inv-tch-date').value = today;
 
@@ -5852,7 +5872,7 @@ function executeArchiveSession(sessName) {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  const ts = new Date().toISOString().slice(0,10);
+  const ts = _todayLocal();
   a.download = `HKN-Archive-${sessName}-${ts}.json`;
   a.click();
   URL.revokeObjectURL(url);
@@ -7436,7 +7456,7 @@ function populateAttendanceDates(sessName) {
   const sess = DB.getSession(sessName);
   const sel  = document.getElementById('att-date');
   if (!sel || !sess) return;
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayLocal();
   const eligibleDates = (sess.classDates || []).filter(d => d <= today);
   if (eligibleDates.length === 0) {
     sel.innerHTML = '<option value="">No class dates yet for this session</option>';
@@ -7658,7 +7678,7 @@ function saveAttendanceBatch() {
   const sessName = document.getElementById('att-session')?.value;
   const date     = document.getElementById('att-date')?.value;
   if (!sessName || !date || !AppState.attBatch) return;
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayLocal();
   if (date > today) { showToast('Cannot mark attendance for future dates', 'error'); return; }
 
   const studentIds = new Set([
@@ -7841,7 +7861,7 @@ function renderIntakeInfoView(student, currentSess) {
   const sd = (student.sessionData || []).find(d => d.session === sessName) || {};
   // Use session passed in — _cache is empty for anonymous parent users
   const sess = currentSess || {};
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayLocal();
 
   // Attendance summary for current session
   const att = sd.attendance || {};
@@ -8065,7 +8085,7 @@ async function _intakeLookupCore() {
 
       // Helper: find best session for Active students
       const getBestSession = () => {
-        const today = new Date().toISOString().slice(0,10);
+        const today = _todayLocal();
         const underway = sessions.find(s => {
           const dates = s.classDates || [];
           return dates.length && today >= dates[0] && today <= dates[dates.length - 1];
@@ -8819,6 +8839,20 @@ function escAttr(str) {
     .replace(/'/g, '&#39;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+// Today's date as YYYY-MM-DD, in the BROWSER'S OWN LOCAL time — not UTC.
+// new Date().toISOString().slice(0,10) looks equivalent but silently
+// converts to UTC first, which can show tomorrow's date during evening
+// hours in any timezone behind UTC (including all of the US). Use this
+// helper anywhere "today" needs to match what the calendar on the wall
+// actually says for the person using the app.
+function _todayLocal() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 // Formats a 10-digit phone number as xxx-xxx-xxxx for display. Anything
