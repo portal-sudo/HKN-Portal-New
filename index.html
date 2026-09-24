@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-22.1';
+const APP_VERSION = 'v2026-09-22.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2762,7 +2762,7 @@ function openStudentModal(studentId) {
         <div class="form-group">
           <label class="form-label">Notes</label>
           ${isAdmin
-            ? `<textarea class="form-textarea" id="sf-notes_${k}" rows="4" style="overflow-y:auto;resize:vertical;">${escHtml(sd.notes||'')}</textarea>
+            ? `<textarea class="form-textarea" id="sf-notes_${k}" rows="12" style="overflow-y:auto;resize:vertical;">${escHtml(formatNotesForDisplay(sd.notes||''))}</textarea>
                ${sd.notes ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px; color:var(--danger);" onclick="clearSessionNotes('${escAttr(s.id)}','${escAttr(sess.name)}')">🗑️ Clear notes</button>` : ''}`
             : teacherCanEdit ? `
               ${sd.notes ? `<div style="font-size:12px;color:var(--ink-mid);background:var(--cream-dark);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px;white-space:pre-wrap;max-height:80px;overflow-y:auto;">${autoLinkUrls(escHtml(sd.notes))}</div>` : ''}
@@ -3278,7 +3278,7 @@ function saveStudentModal(existingId) {
         const _oldNote = existing.notes || '';
         if (isAdmin) {
           // Admin: full edit via textarea
-          const _newNote = document.getElementById(`sf-notes_${k}`)?.value || '';
+          const _newNote = stripNotesDividers(document.getElementById(`sf-notes_${k}`)?.value || '');
           if (_newNote === _oldNote) return _oldNote;
           if (!_newNote) return _oldNote;
           if (_newNote.startsWith(_oldNote) && _oldNote) {
@@ -8853,6 +8853,38 @@ function _todayLocal() {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+// Matches the start of a new dated entry in an accumulated notes field —
+// both "Sep 14, 2026: ..." (regular notes) and "Homework Sep 14, 2026: ..."
+// (homework broadcasts) use this same date format at the start of the line.
+const _NOTES_DATE_LINE = /^(Homework )?[A-Z][a-z]{2} \d{1,2}, \d{4}:/;
+
+// DISPLAY ONLY — inserts a visual divider before each new dated entry
+// (never before the very first line), so a long accumulated notes history
+// is easier to scan. The result of this function must never be saved —
+// see stripNotesDividers(), which must run on anything read back out of
+// a textarea this was applied to, before that value is persisted.
+function formatNotesForDisplay(notesText) {
+  if (!notesText) return notesText;
+  const lines = notesText.split('\n');
+  const out = [];
+  lines.forEach((line, i) => {
+    if (i > 0 && _NOTES_DATE_LINE.test(line)) {
+      out.push('=============');
+    }
+    out.push(line);
+  });
+  return out.join('\n');
+}
+
+// Removes any divider lines formatNotesForDisplay() may have inserted, so
+// they never make it into what actually gets saved — regardless of
+// whether the text came from a textarea the person viewed, edited, or
+// left untouched. Safe to call on any notes text, divider-free or not.
+function stripNotesDividers(notesText) {
+  if (!notesText) return notesText;
+  return notesText.split('\n').filter(line => line !== '=============').join('\n');
 }
 
 // Formats a 10-digit phone number as xxx-xxx-xxxx for display. Anything
