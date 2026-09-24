@@ -1284,7 +1284,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-23.1';
+const APP_VERSION = 'v2026-09-23.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2765,7 +2765,7 @@ function openStudentModal(studentId) {
             ? `<textarea class="form-textarea" id="sf-notes_${k}" rows="12" style="overflow-y:auto;resize:vertical;">${escHtml(formatNotesForDisplay(sd.notes||''))}</textarea>
                ${sd.notes ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px; color:var(--danger);" onclick="clearSessionNotes('${escAttr(s.id)}','${escAttr(sess.name)}')">🗑️ Clear notes</button>` : ''}`
             : teacherCanEdit ? `
-              ${sd.notes ? `<div style="font-size:12px;color:var(--ink-mid);background:var(--cream-dark);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px;white-space:pre-wrap;max-height:80px;overflow-y:auto;">${autoLinkUrls(escHtml(sd.notes))}</div>` : ''}
+              ${sd.notes ? `<div style="font-size:12px;color:var(--ink-mid);background:var(--cream-dark);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px;white-space:pre-wrap;max-height:80px;overflow-y:auto;">${autoLinkUrls(escHtml(formatNotesForDisplay(sd.notes)))}</div>` : ''}
               <input type="text" class="form-input" id="sf-notes-add_${k}" placeholder="Add a note…" style="font-size:12px;"/>
               <div style="font-size:11px;color:var(--ink-light);margin-top:3px;">Date will be added automatically on save</div>`
             : readonlyField(sd.notes)}
@@ -4625,6 +4625,7 @@ function renderAttributesPortal() {
           <button class="btn btn-primary btn-sm" onclick="saveMotd()">💾 Save</button>
           <button class="btn btn-secondary btn-sm" onclick="clearMotd()">✕ Clear</button>
         </div>
+        ${DB.getSettings().motdDate ? `<div style="font-size:11px; color:var(--ink-light); margin-top:8px;">Last changed: ${escHtml(DB.getSettings().motdDate)}</div>` : ''}
       </div>
       <!-- Active Student Portal Message -->
       <div class="card" style="border-color:var(--olive); border-width:1.5px;">
@@ -4639,6 +4640,7 @@ function renderAttributesPortal() {
           <button class="btn btn-primary btn-sm" onclick="saveActiveStudentMsg()">💾 Save</button>
           <button class="btn btn-secondary btn-sm" onclick="clearActiveStudentMsg()">✕ Clear</button>
         </div>
+        ${DB.getSettings().activeStudentMessageDate ? `<div style="font-size:11px; color:var(--ink-light); margin-top:8px;">Last changed: ${escHtml(DB.getSettings().activeStudentMessageDate)}</div>` : ''}
       </div>
     </div>
     <div class="card" style="border-color:var(--orange); border-width:1.5px; margin-bottom:16px;">
@@ -4646,13 +4648,14 @@ function renderAttributesPortal() {
       <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
         Shown to parents right after they submit an interest form (the student's name is shown separately, above this text — no need to repeat it here). Leave blank to use a default message.
       </div>
-      <textarea class="form-textarea" id="interest-confirm-msg-text" rows="4"
+      <textarea class="form-textarea" id="interest-confirm-msg-text" rows="8"
         placeholder="e.g. Fall-2026 enrollment is now closed. We will contact you when enrollment opens for Fall-2027."
         style="margin-bottom:10px;">${escHtml(DB.getSettings().interestConfirmationMessage || '')}</textarea>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-primary btn-sm" onclick="saveInterestConfirmMsg()">💾 Save</button>
         <button class="btn btn-secondary btn-sm" onclick="clearInterestConfirmMsg()">✕ Clear</button>
       </div>
+      ${DB.getSettings().interestConfirmationMessageDate ? `<div style="font-size:11px; color:var(--ink-light); margin-top:8px;">Last changed: ${escHtml(DB.getSettings().interestConfirmationMessageDate)}</div>` : ''}
     </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
       <!-- Parent Portal Access -->
@@ -5234,6 +5237,7 @@ function saveActiveStudentMsg() {
   const text = document.getElementById('active-student-msg-text')?.value.trim() || '';
   const settings = DB.getSettings();
   settings.activeStudentMessage = text;
+  settings.activeStudentMessageDate = text ? new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
   DB.saveSettings(settings);
   showToast(text ? 'Student portal message saved' : 'Student portal message cleared', 'success');
 }
@@ -5241,6 +5245,7 @@ function saveActiveStudentMsg() {
 function clearActiveStudentMsg() {
   const settings = DB.getSettings();
   settings.activeStudentMessage = '';
+  settings.activeStudentMessageDate = '';
   DB.saveSettings(settings);
   const el = document.getElementById('active-student-msg-text');
   if (el) el.value = '';
@@ -5251,6 +5256,7 @@ function saveInterestConfirmMsg() {
   const text = document.getElementById('interest-confirm-msg-text')?.value.trim() || '';
   const settings = DB.getSettings();
   settings.interestConfirmationMessage = text;
+  settings.interestConfirmationMessageDate = text ? new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
   DB.saveSettings(settings);
   showToast(text ? 'Interest confirmation message saved' : 'Interest confirmation message cleared', 'success');
 }
@@ -5258,6 +5264,7 @@ function saveInterestConfirmMsg() {
 function clearInterestConfirmMsg() {
   const settings = DB.getSettings();
   settings.interestConfirmationMessage = '';
+  settings.interestConfirmationMessageDate = '';
   DB.saveSettings(settings);
   const el = document.getElementById('interest-confirm-msg-text');
   if (el) el.value = '';
@@ -7988,9 +7995,13 @@ function renderIntakeInfoView(student, currentSess) {
           return `<div style="margin-bottom:16px;">
             <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Notes from your teacher</div>
             <div style="background:var(--olive-pale); border-left:3px solid var(--olive); border-radius:0 var(--radius-sm) var(--radius-sm) 0; padding:12px 16px;">
-              ${noteLines.map(line =>
-                `<div style="font-size:13px; color:var(--ink-mid); line-height:1.6; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.06);">${autoLinkUrls(escHtml(line))}</div>`
-              ).join('')}
+              ${noteLines.map((line, i) => {
+                const isNewEntry = i > 0 && _NOTES_DATE_LINE.test(line);
+                const divider = isNewEntry
+                  ? `<div style="border-top:2px dashed var(--olive-mid); margin:10px 0;"></div>`
+                  : '';
+                return divider + `<div style="font-size:13px; color:var(--ink-mid); line-height:1.6; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.06);">${autoLinkUrls(escHtml(line))}</div>`;
+              }).join('')}
               <div style="font-size:11px; color:var(--ink-light); margin-top:8px;">— ${escHtml(sd.teacher || 'Your teacher')}</div>
             </div>
           </div>`;
