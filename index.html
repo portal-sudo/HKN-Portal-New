@@ -1286,7 +1286,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-26.5';
+const APP_VERSION = 'v2026-09-26.7';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7044,14 +7044,26 @@ function naturalCompare(a, b) {
 // vary once historical sessions have been imported out of chronological
 // order. Spring-YYYY belongs to the academic cycle started by
 // Fall-(YYYY-1), so it's grouped with the previous year for sorting.
+// Academic year a session belongs to — Fall-Y and Winter-Y keep year Y,
+// but Spring-Y is adjusted to Y-1 so it groups with the Fall/Winter that
+// preceded it in the same school year (Fall-2026 -> Winter-2026 ->
+// Spring-2027 all share academic year 2026). Returns null if the name
+// doesn't match the expected Term-YYYY pattern.
+function getAcademicYear(sessionName) {
+  const m = (sessionName || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
+  if (!m) return null;
+  let year = parseInt(m[2], 10);
+  if (m[1] === 'Spring') year -= 1;
+  return year;
+}
+
 function sortSessionsChronological(sessionList) {
   const key = (name) => {
     const m = (name || '').match(/^(Fall|Winter|Spring)-(\d{4})/);
     if (!m) return [9999, 9];
     const termOrder = { Fall: 0, Winter: 1, Spring: 2 }[m[1]];
-    let year = parseInt(m[2], 10);
-    if (m[1] === 'Spring') year -= 1;
-    return [year, termOrder];
+    const year = getAcademicYear(name);
+    return [year ?? 9999, termOrder];
   };
   return sessionList.slice().sort((a, b) => {
     const [ay, at] = key(a.name), [by, bt] = key(b.name);
@@ -7868,9 +7880,30 @@ async function showPublicIntake() {
 function renderIntakeInfoView(student, currentSess) {
   const sessName = currentSess?.name || '';
   const sd = (student.sessionData || []).find(d => d.session === sessName) || {};
+  const hasData = (student.sessionData || []).some(d => d.session === sessName);
   // Use session passed in — _cache is empty for anonymous parent users
   const sess = currentSess || {};
   const today = _todayLocal();
+
+  // Session switcher: only sessions sharing the same academic year as the
+  // currently-viewed one, and only those with class dates actually set —
+  // even ones the student has no data for yet (e.g. an upcoming Winter
+  // term before Roll Forward has happened). Sessions from a different
+  // academic year (e.g. a prior Spring) are deliberately excluded, even
+  // if the student has historical data there.
+  const academicYear = currentSess ? getAcademicYear(currentSess.name) : null;
+  const yearSessions = academicYear !== null
+    ? sortSessionsChronological((intakeState.sessions || [])
+        .filter(s => getAcademicYear(s.name) === academicYear && (s.classDates || []).length > 0))
+        .slice().reverse()
+    : [];
+  const sessionSwitcherHtml = yearSessions.length > 1 ? `
+    <div style="margin-bottom:14px;">
+      <select class="form-select" style="width:100%;" onchange="onIntakeSessionSwitch(this.value)">
+        ${yearSessions.map(s => `<option value="${escAttr(s.name)}" ${s.name === sessName ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+      </select>
+    </div>
+  ` : '';
 
   // Attendance summary for current session
   const att = sd.attendance || {};
@@ -7904,7 +7937,9 @@ function renderIntakeInfoView(student, currentSess) {
         </a>
       </div>
 
-      ${sessName ? `
+      ${sessionSwitcherHtml}
+
+      ${sessName ? (hasData ? `
         <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:16px 18px; margin-bottom:16px;">
           <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">Current session — ${escHtml(sessName)}</div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -8024,7 +8059,7 @@ function renderIntakeInfoView(student, currentSess) {
                   currentStyle = 'color:var(--ink-mid); border-bottom:1px solid rgba(0,0,0,0.06);';
                 }
               } else {
-                currentStyle = 'color:var(--note-blue); background:var(--note-blue-light); font-family:var(--serif); font-weight:700; font-size:20px;';
+                currentStyle = 'color:var(--note-blue); background:var(--note-blue-light); font-family:var(--serif); font-weight:700; font-size:18px;';
                 icon = '📌 ';
               }
             }
@@ -8044,6 +8079,19 @@ function renderIntakeInfoView(student, currentSess) {
         })()}
 
       ` : `
+        <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:16px 18px; margin-bottom:16px;">
+          <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">${escHtml(sessName)}</div>
+          ${(sess.classDates || []).length > 0 ? `
+            <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">Class dates for this upcoming term:</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+              ${sess.classDates.map(d => `<div style="padding:4px 10px; border-radius:6px; border:1px solid var(--olive-mid); font-size:12px; font-weight:500; background:var(--cream-dark); color:var(--ink-light);">${escHtml(d)}</div>`).join('')}
+            </div>
+            <div style="font-size:12px; color:var(--ink-light);">Your child will be automatically continued into this session — no action needed on your part.</div>
+          ` : `
+            <div style="font-size:13px; color:var(--ink-light);">Dates for this session haven't been set yet.</div>
+          `}
+        </div>
+      `) : `
         <div style="color:var(--ink-light); font-size:13px; padding:12px 0;">No active session found. Please contact the school for more information.</div>
       `}
     </div>
@@ -8052,6 +8100,15 @@ function renderIntakeInfoView(student, currentSess) {
       If you have any questions, please contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
     </div>
   `;
+}
+
+// Handles the session-switcher dropdown in the parent-facing info view —
+// re-renders the same view against whichever session was picked, reusing
+// the student and session list already stored in intakeState.
+function onIntakeSessionSwitch(sessionName) {
+  const sess = (intakeState.sessions || []).find(s => s.name === sessionName);
+  if (!sess || !intakeState.student) return;
+  renderIntakeInfoView(intakeState.student, sess);
 }
 
 function intakeLookup() {
