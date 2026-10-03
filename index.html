@@ -1065,11 +1065,23 @@ const DB = {
     const hasSessionFilter = Array.isArray(session) ? session.length > 0 : !!session;
     const hasTeacherFilter = Array.isArray(teacher) ? teacher.length > 0 : !!teacher;
     const hasLevelFilter   = Array.isArray(classLevel) ? classLevel.length > 0 : !!classLevel;
+    // Phone search: only treat the query as a phone number when it strips down to
+    // 10-13 digits (plain 10-digit number, or one with a country code prefix like
+    // +1 or +91). Shorter digit runs (zip codes, student IDs, etc.) are left alone.
+    // Comparison is on the last 10 digits only, so a stored number saved with any
+    // country code prefix still matches a search typed without one, and vice versa.
+    const last10 = digits => digits.slice(-10);
+    const qDigitsRaw = name.replace(/\D/g, '');
+    const qPhone = (qDigitsRaw.length >= 10 && qDigitsRaw.length <= 13) ? last10(qDigitsRaw) : '';
     return _cache.students.filter(s => {
       const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
       const parentName = `${s.parentFirstName} ${s.parentLastName}`.toLowerCase();
       const q = name.toLowerCase();
-      if (name && !fullName.includes(q) && !parentName.includes(q) && !(s.studentId||'').toLowerCase().includes(q) && !(s.notes||'').toLowerCase().includes(q)) return false;
+      const phoneMatches = qPhone && (
+        last10((s.phone||'').replace(/\D/g, '')) === qPhone ||
+        last10((s.altContactPhone||'').replace(/\D/g, '')) === qPhone
+      );
+      if (name && !fullName.includes(q) && !parentName.includes(q) && !(s.studentId||'').toLowerCase().includes(q) && !(s.notes||'').toLowerCase().includes(q) && !phoneMatches) return false;
       if (status && s.status !== status) return false;
       if (hasTeacherFilter || hasLevelFilter || hasSessionFilter) {
         const allSessions = this.getSessions().map(s => s.name);
