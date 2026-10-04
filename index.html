@@ -6053,6 +6053,7 @@ const SupabaseSync = {
         classDates:     row.class_dates   || [],
         classNotes:     row.class_notes   || {},
         refunds:        row.refunds       || [],
+        healthNote:     row.health_note   || '',
       }));
 
       // ── Reassemble teachers ──
@@ -6382,6 +6383,7 @@ const SupabaseSync = {
       class_dates:     s.classDates      || [],
       class_notes:     s.classNotes      || {},
       refunds:         s.refunds         || [],
+      health_note:     s.healthNote      || '',
     };
   },
 
