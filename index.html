@@ -1267,7 +1267,7 @@ const DB = {
     return _matchingStudents(sessionName, grouping, groupKey)
       .map(({ student, sd }) => {
         const absentCount = Object.values(sd.attendance || {}).filter(v => v === 'absent').length;
-        return { studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, absentCount };
+        return { id: student.id, studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, absentCount };
       })
       .filter(r => r.absentCount >= threshold)
       .sort((a, b) => b.absentCount - a.absentCount);
@@ -1299,7 +1299,7 @@ const DB = {
             current = 0;
           }
         });
-        return { studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, consecutiveCount: longest };
+        return { id: student.id, studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, consecutiveCount: longest };
       })
       .filter(r => r.consecutiveCount >= threshold)
       .sort((a, b) => b.consecutiveCount - a.consecutiveCount);
@@ -1407,7 +1407,7 @@ const DB = {
         if (!lastDate) return null; // never noted — not flaggable
         const weeksSince = (today - lastDate) / (7 * 24 * 60 * 60 * 1000);
         return {
-          studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`,
+          id: student.id, studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`,
           lastNoteDate: lastDate.toISOString().slice(0, 10),
           weeksSince: Math.floor(weeksSince), _raw: weeksSince,
         };
@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-04.7';
+const APP_VERSION = 'v2026-10-04.8';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1948,6 +1948,7 @@ function buildSidebar() {
     { id:'classes',  icon:'🏫', label:'Classes' },
     { id:'scoring-guide', icon:'📖', label:'Scoring guide' },
     { id:'school-health', icon:'📈', label:'School Health' },
+    { id:'audit-logs', icon:'🔍', label:'Audit Logs' },
     ...(isAdmin ? [
       { id:'attributes', icon:'⚙️', label:'Settings', children: ATTR_TABS },
     ] : []),
@@ -2005,6 +2006,7 @@ function navigateTo(page) {
     classes:     renderClasses,
     'scoring-guide': renderScoringGuide,
     'school-health': renderSchoolHealth,
+    'audit-logs':    renderAuditLogs,
     attributes:  renderAttributesChooser,
     email:       renderEmail,
     templates:   renderTemplates,
@@ -7943,6 +7945,173 @@ function saveHealthNote() {
     setTimeout(() => { if (status) status.textContent = ''; }, 2500);
   }
   showToast('Note saved', 'success');
+}
+
+// AUDIT LOGS — six read-only checks (4 attendance + 2 notes/homework) over
+// the active audit* functions on DB. Full visibility for both teachers and
+// admins — a teacher's filter just defaults to their own name on landing,
+// it doesn't restrict what they can view (they can change it to see any
+// class/teacher). grouping is '' (whole school) | 'teacher' | 'class',
+// mirroring the audit-function convention, but deliberately NOT reusing
+// _healthState — these are six independent checks, not a single
+// metric/series pair.
+let _auditState = { session: '', grouping: '', groupKey: '' };
+
+function renderAuditLogs() {
+  const sessions = sortSessionsChronological(DB.getSessions());
+  const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
+  _auditState.session = activeSess?.name || '';
+  _auditState.grouping = '';
+  _auditState.groupKey = '';
+  if (currentUser.role === 'teacher' && currentUser.name) {
+    _auditState.grouping = 'teacher';
+    _auditState.groupKey = currentUser.name;
+  }
+
+  document.getElementById('content-area').innerHTML = `
+    <div class="page-header">
+      <div class="page-title">Audit Logs</div>
+      <div class="page-subtitle">Attendance and notes checks — read-only</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="form-group" style="min-width:140px;">
+          <label class="form-label">Session</label>
+          <select class="form-select" id="audit-session" onchange="onAuditSessionChange()">
+            ${sessions.map(s => `<option value="${escAttr(s.name)}" ${s.name === _auditState.session ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:240px;">
+          <label class="form-label">Teacher / Class filter</label>
+          <select class="form-select" id="audit-filter" onchange="onAuditFilterChange()"></select>
+        </div>
+      </div>
+    </div>
+
+    <div id="audit-panels"></div>
+  `;
+
+  _populateAuditFilterOptions();
+  renderAuditPanels();
+}
+
+function _populateAuditFilterOptions() {
+  const sel = document.getElementById('audit-filter');
+  const teacherGroups = DB.healthGroups(_auditState.session, 'teacher');
+  const classGroups   = DB.healthGroups(_auditState.session, 'class');
+  sel.innerHTML = `
+    <option value="">— All (whole school) —</option>
+    <optgroup label="By teacher">
+      ${teacherGroups.map(g => `<option value="teacher|${escAttr(g.key)}" ${_auditState.grouping === 'teacher' && _auditState.groupKey === g.key ? 'selected' : ''}>${escHtml(g.label)}</option>`).join('')}
+    </optgroup>
+    <optgroup label="By class">
+      ${classGroups.map(g => `<option value="class|${escAttr(g.key)}" ${_auditState.grouping === 'class' && _auditState.groupKey === g.key ? 'selected' : ''}>${escHtml(g.label)}</option>`).join('')}
+    </optgroup>
+  `;
+  if (!_auditState.grouping) sel.value = '';
+}
+
+function onAuditSessionChange() {
+  _auditState.session = document.getElementById('audit-session').value;
+  _auditState.grouping = '';
+  _auditState.groupKey = '';
+  _populateAuditFilterOptions();
+  renderAuditPanels();
+}
+
+function onAuditFilterChange() {
+  const val = document.getElementById('audit-filter').value;
+  if (!val) {
+    _auditState.grouping = '';
+    _auditState.groupKey = '';
+  } else {
+    // Split on the FIRST '|' only — a class groupKey is itself
+    // "teacher|classTime" and contains further '|' characters.
+    const idx = val.indexOf('|');
+    _auditState.grouping = val.slice(0, idx);
+    _auditState.groupKey = val.slice(idx + 1);
+  }
+  renderAuditPanels();
+}
+
+function renderAuditPanels() {
+  const { session, grouping, groupKey } = _auditState;
+
+  const unmarked   = DB.auditUnmarkedClasses(session, grouping, groupKey);
+  const absTotal   = DB.auditAbsencesTotal(session, grouping, groupKey);
+  const absConsec  = DB.auditAbsencesConsecutive(session, grouping, groupKey);
+  const lowTurnout = DB.auditLowTurnout(session, grouping, groupKey);
+  const missingHw  = DB.auditMissingHomework(session, grouping, groupKey);
+  const staleNotes = DB.auditStaleNotes(session, grouping, groupKey);
+
+  document.getElementById('audit-panels').innerHTML = `
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+      ${_auditPanelHtml('🚫 Class attendance unmarked', unmarked, f => ({
+        onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
+        label: `${escHtml(f.classLabel)} — ${escHtml(f.date)}`,
+      }))}
+      ${_auditPanelHtml('📉 Student absent 3+ times', absTotal, f => ({
+        onclick: `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — ${f.absentCount} absences`,
+      }))}
+      ${_auditPanelHtml('⏭️ Student absent 2+ in a row', absConsec, f => ({
+        onclick: `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — ${f.consecutiveCount} in a row`,
+      }))}
+      ${_auditPanelHtml('📊 Low turnout (last class < 50%)', lowTurnout, f => ({
+        onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
+        label: `${escHtml(f.classLabel)} — ${f.presentCount}/${f.enrolledCount} on ${escHtml(f.date)}`,
+      }))}
+      ${_auditPanelHtml('📚 Missing homework (2+ weeks)', missingHw, f => ({
+        onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
+        label: `${escHtml(f.classLabel)} — ${f.lastHomeworkDate ? `last: ${escHtml(f.lastHomeworkDate)}` : 'never'}`,
+      }))}
+      ${_auditPanelHtml('📝 Stale notes (3+ weeks)', staleNotes, f => ({
+        onclick: `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — last noted ${escHtml(f.lastNoteDate)}`,
+      }))}
+    </div>
+  `;
+}
+
+// rowFn(item) returns { onclick, label } — label is already-escaped display
+// text, onclick is a plain JS call expression (no surrounding quotes).
+function _auditPanelHtml(title, items, rowFn) {
+  return `
+    <div class="card">
+      <div class="card-title">${title}</div>
+      <div style="margin-top:8px;">
+        ${items.length ? items.map(f => {
+          const { onclick, label } = rowFn(f);
+          return `
+          <div style="padding:8px 4px; border-bottom:1px solid var(--olive-pale); cursor:pointer; font-size:13px;"
+               onmouseover="this.style.background='var(--olive-pale)'" onmouseout="this.style.background=''"
+               onclick="${escAttr(onclick)}">
+            ${label}
+          </div>`;
+        }).join('') : `<div style="font-size:13px; color:var(--ink-light); padding:8px 0;">Nothing flagged ✓</div>`}
+      </div>
+    </div>
+  `;
+}
+
+// classKey is "teacher|classTime"; the existing Classes-page preset
+// (goToClassFromOverview, used from the Dashboard) keys on
+// (teacher, classLevel) instead, so look up classLevel from any matching
+// enrolled student before reusing that existing navigation.
+function goToClassFromAudit(classKey) {
+  const idx = classKey.indexOf('|');
+  const teacher = classKey.slice(0, idx);
+  const classTime = classKey.slice(idx + 1);
+  const sessName = _auditState.session;
+  const match = DB.getStudents().find(s => {
+    if (s.status !== 'Active') return false;
+    const sd = (s.sessionData || []).find(d => d.session === sessName);
+    return sd && sd.teacher === teacher && sd.classTime === classTime;
+  });
+  const sd = match && (match.sessionData || []).find(d => d.session === sessName);
+  goToClassFromOverview(teacher, sd?.classLevel || '');
 }
 
 function renderAttendance() {
