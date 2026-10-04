@@ -1150,20 +1150,16 @@ const DB = {
   },
 
   // Returns { dates, counts, enrolledTotal } for the given session/metric/
-  // grouping. dates is session.classDates filtered to today or earlier
+  // grouping. dates is session.classDates as-is, including future dates
   // (trusted chronological order, same assumption already made everywhere
-  // else classDates is used) — future class dates are excluded entirely.
+  // else classDates is used) — the chart renderer, not this function,
+  // decides where to stop drawing the line (see _renderHealthChartSvg).
   // counts is { present/absent/vacation -> [n per date] } for 'attendance',
   // or { yes/no -> [n per date] } for 'homework' — 'unmarked'/'unknown'
   // values are intentionally not tallied (nothing to plot for those).
   healthTrend(sessionName, metric, grouping, groupKey) {
     const sess = this.getSession(sessionName);
-    // Stop at today — future class dates haven't happened yet, so they'd
-    // otherwise show as a flat, misleading zero. Uses the same _todayLocal()
-    // date-string comparison already used elsewhere (e.g. pastDates in the
-    // parent portal view).
-    const today = _todayLocal();
-    const dates = (sess?.classDates || []).filter(d => d <= today);
+    const dates = (sess?.classDates || []).slice();
 
     const matchingSd = _cache.students
       .filter(s => {
@@ -1377,7 +1373,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-04.5';
+const APP_VERSION = 'v2026-10-04.7';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7644,38 +7640,45 @@ function _renderHealthChartSvg(trend, seriesKey, metric) {
   const colorMap = { present:'var(--success)', absent:'var(--danger)', vacation:'var(--warning)', yes:'var(--success)', no:'var(--danger)' };
   const color = colorMap[seriesKey] || 'var(--olive)';
 
-  // Font sizes are 3x the original (9/10px -> 27/30px), per explicit request —
-  // padding and chart height grow to match so the bigger text has room and
-  // doesn't collide with the plot area or adjacent labels.
-  const chartW = 900, chartH = 340, padL = 70, padB = 70, padT = 46;
+  // Font size 18px for all chart labels (axis numbers, date labels, value
+  // labels), per explicit request — padding/chart height sized to match.
+  const chartW = 900, chartH = 280, padL = 50, padB = 50, padT = 30;
   const plotW = chartW - padL - 14, plotH = chartH - padB - padT;
   const stepX = dates.length > 1 ? plotW / (dates.length - 1) : 0;
 
   const xAt = i => padL + i * stepX;
   const yAt = v => padT + (plotH - (v / maxY) * plotH);
 
-  const pointsAttr = values.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
+  // Show every class date on the x-axis, but only draw the line/dots
+  // through today — a future date gets a label with nothing plotted at it,
+  // rather than a misleading zero point or an extended flat line.
+  const today = _todayLocal();
+  const lastDrawn = dates.reduce((last, d, i) => d <= today ? i : last, -1);
+
+  const pointsAttr = values.slice(0, lastDrawn + 1).map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
   const shortDate = d => { const m = d.match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? `${parseInt(m[1],10)}/${parseInt(m[2],10)}` : d; };
   const showLabel = i => dates.length <= 12 || i % 2 === 0 || i === dates.length - 1;
 
   const dotsAndLabels = values.map((v, i) => `
-    <circle cx="${xAt(i)}" cy="${yAt(v)}" r="6" fill="${color}">
+    ${i <= lastDrawn ? `
+    <circle cx="${xAt(i)}" cy="${yAt(v)}" r="5" fill="${color}">
       <title>${escHtml(dates[i])}: ${v}</title>
     </circle>
-    <text x="${xAt(i)}" y="${yAt(v) - 14}" font-size="30" text-anchor="middle" fill="var(--ink-mid)">${v}</text>
-    ${showLabel(i) ? `<text x="${xAt(i)}" y="${chartH - padB + 34}" font-size="27" text-anchor="middle" fill="var(--ink-light)">${shortDate(dates[i])}</text>` : ''}
+    <text x="${xAt(i)}" y="${yAt(v) - 10}" font-size="18" text-anchor="middle" fill="var(--ink-mid)">${v}</text>
+    ` : ''}
+    ${showLabel(i) ? `<text x="${xAt(i)}" y="${chartH - padB + 24}" font-size="18" text-anchor="middle" fill="var(--ink-light)">${shortDate(dates[i])}</text>` : ''}
   `).join('');
 
   return `
     <div style="font-size:12px; color:var(--ink-light); margin-bottom:10px;">
-      Enrolled: ${enrolledTotal} &nbsp;·&nbsp; y-axis fixed at enrolled total, not observed max &nbsp;·&nbsp; stops at the last marked class date
+      Enrolled: ${enrolledTotal} &nbsp;·&nbsp; y-axis fixed at enrolled total, not observed max &nbsp;·&nbsp; line stops at today
     </div>
-    <svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%; height:auto; max-height:380px;">
+    <svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%; height:auto; max-height:320px;">
       <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${chartH-padB}" stroke="var(--olive-mid)" stroke-width="1"/>
       <line x1="${padL}" y1="${chartH-padB}" x2="${chartW-10}" y2="${chartH-padB}" stroke="var(--olive-mid)" stroke-width="1"/>
-      <text x="${padL-10}" y="${padT+10}" font-size="27" text-anchor="end" fill="var(--ink-light)">${maxY}</text>
-      <text x="${padL-10}" y="${chartH-padB+10}" font-size="27" text-anchor="end" fill="var(--ink-light)">0</text>
-      <polyline points="${pointsAttr}" fill="none" stroke="${color}" stroke-width="2"/>
+      <text x="${padL-8}" y="${padT+6}" font-size="18" text-anchor="end" fill="var(--ink-light)">${maxY}</text>
+      <text x="${padL-8}" y="${chartH-padB+6}" font-size="18" text-anchor="end" fill="var(--ink-light)">0</text>
+      ${lastDrawn >= 0 ? `<polyline points="${pointsAttr}" fill="none" stroke="${color}" stroke-width="2"/>` : ''}
       ${dotsAndLabels}
     </svg>
     <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">Class date →</div>
