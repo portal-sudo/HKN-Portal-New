@@ -843,6 +843,52 @@ function _healthClassKey(sd) {
   return `${sd.teacher || ''}|${sd.classTime || ''}`;
 }
 
+// Active students with a sessionData entry for the given session, optionally
+// scoped by grouping/groupKey (same semantics as DB.healthGroups/healthTrend:
+// grouping is 'school' | 'teacher' | 'class'). Returns [{ student, sd }] —
+// callers that only need sd (like healthTrend) can map it down further.
+// Shared by School Health and the Audit Logs checks, so the "who counts"
+// definition stays in exactly one place.
+function _matchingStudents(sessionName, grouping, groupKey) {
+  return _cache.students
+    .filter(s => s.status === 'Active')
+    .map(s => ({ student: s, sd: (s.sessionData || []).find(d => d.session === sessionName) }))
+    .filter(({ sd }) => !!sd)
+    .filter(({ sd }) => {
+      if (grouping === 'teacher') return (sd.teacher || '') === groupKey;
+      if (grouping === 'class')   return _healthClassKey(sd) === groupKey;
+      return true; // 'school'
+    });
+}
+
+// Matches the date part of a dated notes line — same line shape as
+// _NOTES_DATE_LINE below, but with the date captured so callers can parse
+// it, and with an isHomework flag since homework broadcasts and regular
+// per-student notes share this exact same field and format, distinguished
+// only by the "Homework " prefix (see saveHomeworkNoteToClass).
+const _NOTES_DATE_LINE_CAP = /^(Homework )?([A-Z][a-z]{2} \d{1,2}, \d{4}):/;
+
+// Returns the most recent dated line's JS Date in a notes field, or null if
+// none found. opts.homeworkOnly / opts.excludeHomework pick which kind of
+// dated line to consider — notes and homework broadcasts are interleaved in
+// the same field in whatever order they were added, not separated or
+// pre-sorted, so this has to scan every line rather than just take the last.
+function _lastNotesDate(notesText, opts = {}) {
+  if (!notesText) return null;
+  let latest = null;
+  notesText.split('\n').forEach(line => {
+    const m = line.match(_NOTES_DATE_LINE_CAP);
+    if (!m) return;
+    const isHomework = !!m[1];
+    if (opts.homeworkOnly && !isHomework) return;
+    if (opts.excludeHomework && isHomework) return;
+    const d = new Date(m[2]);
+    if (isNaN(d)) return;
+    if (!latest || d > latest) latest = d;
+  });
+  return latest;
+}
+
 // ── DATA ACCESS LAYER ────────────────────────────────────────
 const DB = {
 
@@ -1161,16 +1207,7 @@ const DB = {
     const sess = this.getSession(sessionName);
     const dates = (sess?.classDates || []).slice();
 
-    const matchingSd = _cache.students
-      .filter(s => {
-        if (s.status !== 'Active') return false;
-        const sd = (s.sessionData || []).find(d => d.session === sessionName);
-        if (!sd) return false;
-        if (grouping === 'teacher') return (sd.teacher || '') === groupKey;
-        if (grouping === 'class')   return _healthClassKey(sd) === groupKey;
-        return true; // 'school'
-      })
-      .map(s => (s.sessionData || []).find(d => d.session === sessionName));
+    const matchingSd = _matchingStudents(sessionName, grouping, groupKey).map(({ sd }) => sd);
 
     const valueKeys = metric === 'attendance' ? ['present', 'absent', 'vacation'] : ['yes', 'no'];
     const counts = {};
@@ -1185,6 +1222,199 @@ const DB = {
     });
 
     return { dates, counts, enrolledTotal: matchingSd.length };
+  },
+
+  // Audit check: classes with a past class date where NOT A SINGLE enrolled
+  // student has any attendance mark at all (a fully-skipped roll call, not
+  // just one student's attendance missing — that's not flagged here).
+  // grouping/groupKey optionally scope which classes are checked, same
+  // 'teacher' | 'class' | null convention as healthTrend/healthGroups.
+  // Returns [{ classKey, classLabel, date }], one entry per unmarked
+  // (class, date) pair.
+  auditUnmarkedClasses(sessionName, grouping, groupKey) {
+    const sess = this.getSession(sessionName);
+    const today = _todayLocal();
+    const pastDates = (sess?.classDates || []).filter(d => d <= today);
+    if (!pastDates.length) return [];
+
+    let classGroups = this.healthGroups(sessionName, 'class');
+    if (grouping === 'class') {
+      classGroups = classGroups.filter(g => g.key === groupKey);
+    } else if (grouping === 'teacher') {
+      classGroups = classGroups.filter(g => g.key.split('|')[0] === groupKey);
+    }
+
+    const flags = [];
+    classGroups.forEach(({ key, label }) => {
+      const sds = _matchingStudents(sessionName, 'class', key).map(({ sd }) => sd);
+      if (!sds.length) return;
+      pastDates.forEach(date => {
+        const anyMarked = sds.some(sd => !!(sd.attendance || {})[date]);
+        if (!anyMarked) flags.push({ classKey: key, classLabel: label, date });
+      });
+    });
+    return flags;
+  },
+
+  // Audit check: students with >= threshold total 'absent' marks in this
+  // session (not necessarily consecutive — see auditAbsencesConsecutive for
+  // that). grouping/groupKey optionally scope to one class/teacher, same
+  // convention as the other audit checks. threshold defaults to 3 (hardcoded
+  // for now; may become an admin-configurable setting later).
+  // Returns [{ studentId, studentName, absentCount }], sorted by absentCount
+  // descending.
+  auditAbsencesTotal(sessionName, grouping, groupKey, threshold = 3) {
+    return _matchingStudents(sessionName, grouping, groupKey)
+      .map(({ student, sd }) => {
+        const absentCount = Object.values(sd.attendance || {}).filter(v => v === 'absent').length;
+        return { studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, absentCount };
+      })
+      .filter(r => r.absentCount >= threshold)
+      .sort((a, b) => b.absentCount - a.absentCount);
+  },
+
+  // Audit check: students with a run of >= threshold consecutive 'absent'
+  // marks in this session (back-to-back class dates, not just a total
+  // count — see auditAbsencesTotal for that). Only class dates that have
+  // already happened (<= today) are considered, in session.classDates
+  // order, so a future unmarked date can't fake or break a streak.
+  // 'present' and 'vacation' (displayed "Excused") both break the streak —
+  // only consecutive 'absent' marks count. threshold defaults to 2.
+  // Returns [{ studentId, studentName, consecutiveCount }], sorted by
+  // consecutiveCount descending.
+  auditAbsencesConsecutive(sessionName, grouping, groupKey, threshold = 2) {
+    const sess = this.getSession(sessionName);
+    const today = _todayLocal();
+    const pastDates = (sess?.classDates || []).filter(d => d <= today);
+
+    return _matchingStudents(sessionName, grouping, groupKey)
+      .map(({ student, sd }) => {
+        const att = sd.attendance || {};
+        let longest = 0, current = 0;
+        pastDates.forEach(date => {
+          if (att[date] === 'absent') {
+            current++;
+            longest = Math.max(longest, current);
+          } else {
+            current = 0;
+          }
+        });
+        return { studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, consecutiveCount: longest };
+      })
+      .filter(r => r.consecutiveCount >= threshold)
+      .sort((a, b) => b.consecutiveCount - a.consecutiveCount);
+  },
+
+  // Audit check: classes where turnout (present / enrolled) on the most
+  // recent past class date fell below threshold (default 50%). classDates
+  // are shared across all classes in a session, so "most recent past date"
+  // is the same single date for every class — this is a point-in-time
+  // signal (last class only), not a rolling average. A class with no
+  // enrolled students, or no past class date yet, is skipped (nothing
+  // meaningful to compute). grouping/groupKey optionally scope which
+  // classes are checked, same convention as the other audit checks.
+  // Returns [{ classKey, classLabel, date, presentCount, enrolledCount,
+  // turnoutFraction }], sorted by turnoutFraction ascending (worst first).
+  auditLowTurnout(sessionName, grouping, groupKey, threshold = 0.5) {
+    const sess = this.getSession(sessionName);
+    const today = _todayLocal();
+    const pastDates = (sess?.classDates || []).filter(d => d <= today);
+    if (!pastDates.length) return [];
+    const lastDate = pastDates[pastDates.length - 1];
+
+    let classGroups = this.healthGroups(sessionName, 'class');
+    if (grouping === 'class') {
+      classGroups = classGroups.filter(g => g.key === groupKey);
+    } else if (grouping === 'teacher') {
+      classGroups = classGroups.filter(g => g.key.split('|')[0] === groupKey);
+    }
+
+    const flags = [];
+    classGroups.forEach(({ key, label }) => {
+      const sds = _matchingStudents(sessionName, 'class', key).map(({ sd }) => sd);
+      const enrolledCount = sds.length;
+      if (!enrolledCount) return;
+      const presentCount = sds.filter(sd => (sd.attendance || {})[lastDate] === 'present').length;
+      const turnoutFraction = presentCount / enrolledCount;
+      if (turnoutFraction < threshold) {
+        flags.push({ classKey: key, classLabel: label, date: lastDate, presentCount, enrolledCount, turnoutFraction });
+      }
+    });
+    return flags.sort((a, b) => a.turnoutFraction - b.turnoutFraction);
+  },
+
+  // Audit check: classes whose most recent homework broadcast (see
+  // saveHomeworkNoteToClass) is more than weeksThreshold weeks old, or that
+  // have never had one. Homework broadcasts are written into every
+  // currently-enrolled student's notes field at broadcast time (not stored
+  // per-class), so "the class's last homework broadcast" is taken as the
+  // MOST RECENT homework-line date found across all of the class's
+  // currently-enrolled students — a student who joined after a broadcast
+  // simply won't have that older line, which doesn't affect the max.
+  // grouping/groupKey optionally scope which classes are checked, same
+  // convention as the other audit checks. weeksThreshold defaults to 2.
+  // Returns [{ classKey, classLabel, lastHomeworkDate, weeksSince }],
+  // lastHomeworkDate is an ISO date string or null if never broadcast,
+  // sorted with never-broadcast classes first, then oldest first.
+  auditMissingHomework(sessionName, grouping, groupKey, weeksThreshold = 2) {
+    const today = new Date(_todayLocal());
+    let classGroups = this.healthGroups(sessionName, 'class');
+    if (grouping === 'class') {
+      classGroups = classGroups.filter(g => g.key === groupKey);
+    } else if (grouping === 'teacher') {
+      classGroups = classGroups.filter(g => g.key.split('|')[0] === groupKey);
+    }
+
+    const flags = [];
+    classGroups.forEach(({ key, label }) => {
+      const sds = _matchingStudents(sessionName, 'class', key).map(({ sd }) => sd);
+      if (!sds.length) return;
+      let lastDate = null;
+      sds.forEach(sd => {
+        const d = _lastNotesDate(sd.notes, { homeworkOnly: true });
+        if (d && (!lastDate || d > lastDate)) lastDate = d;
+      });
+      const weeksSince = lastDate ? (today - lastDate) / (7 * 24 * 60 * 60 * 1000) : Infinity;
+      if (weeksSince > weeksThreshold) {
+        flags.push({
+          classKey: key, classLabel: label,
+          lastHomeworkDate: lastDate ? lastDate.toISOString().slice(0, 10) : null,
+          weeksSince: weeksSince === Infinity ? null : Math.floor(weeksSince),
+        });
+      }
+    });
+    return flags.sort((a, b) => {
+      if (a.lastHomeworkDate === null && b.lastHomeworkDate === null) return 0;
+      if (a.lastHomeworkDate === null) return -1;
+      if (b.lastHomeworkDate === null) return 1;
+      return a.lastHomeworkDate.localeCompare(b.lastHomeworkDate);
+    });
+  },
+
+  // Audit check: students whose most recent PERSONAL note (excluding
+  // homework broadcast lines — see _lastNotesDate's excludeHomework option)
+  // is more than weeksThreshold weeks old. A student with no personal note
+  // EVER is deliberately NOT flagged — nothing to go stale, not an issue
+  // this check surfaces. grouping/groupKey optionally scope to one
+  // class/teacher, same convention as the other audit checks.
+  // weeksThreshold defaults to 3. Returns [{ studentId, studentName,
+  // lastNoteDate, weeksSince }], sorted oldest first.
+  auditStaleNotes(sessionName, grouping, groupKey, weeksThreshold = 3) {
+    const today = new Date(_todayLocal());
+    return _matchingStudents(sessionName, grouping, groupKey)
+      .map(({ student, sd }) => {
+        const lastDate = _lastNotesDate(sd.notes, { excludeHomework: true });
+        if (!lastDate) return null; // never noted — not flaggable
+        const weeksSince = (today - lastDate) / (7 * 24 * 60 * 60 * 1000);
+        return {
+          studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`,
+          lastNoteDate: lastDate.toISOString().slice(0, 10),
+          weeksSince: Math.floor(weeksSince), _raw: weeksSince,
+        };
+      })
+      .filter(r => r && r._raw > weeksThreshold)
+      .sort((a, b) => b._raw - a._raw)
+      .map(({ _raw, ...rest }) => rest);
   },
 
   // EXPORT / IMPORT
