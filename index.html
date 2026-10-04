@@ -835,6 +835,14 @@ const SessionEngine = {
   buildSessionName(term, year) { return `${term}-${year}`; },
 };
 
+// "Class identity" within a session is (teacher, classTime) — classLevel is
+// fully determined by that pair (verified against real data), not an
+// independent axis, and matches the key format already used by
+// session.classNotes (e.g. "Rina|Sat 10:00 AM"). Reused by School Health.
+function _healthClassKey(sd) {
+  return `${sd.teacher || ''}|${sd.classTime || ''}`;
+}
+
 // ── DATA ACCESS LAYER ────────────────────────────────────────
 const DB = {
 
@@ -1112,6 +1120,71 @@ const DB = {
     return counts;
   },
 
+  // ── SCHOOL HEALTH — attendance/homework trend data ──────────
+  // Scoped to Active students with a sessionData entry for the given
+  // session. grouping is 'school' | 'teacher' | 'class'; groupKey is
+  // ignored for 'school', a teacher name for 'teacher', and a
+  // "teacher|classTime" key (see _healthClassKey) for 'class'.
+
+  // Returns the pickable groups for a grouping, as [{key, label}],
+  // sorted by label. Used to populate the School Health class/teacher
+  // picker — not needed for 'school', which has no sub-groups.
+  healthGroups(sessionName, grouping) {
+    const seen = new Map();
+    _cache.students.forEach(s => {
+      if (s.status !== 'Active') return;
+      const sd = (s.sessionData || []).find(d => d.session === sessionName);
+      if (!sd) return;
+      if (grouping === 'teacher') {
+        const key = sd.teacher || '';
+        if (key && !seen.has(key)) seen.set(key, key);
+      } else if (grouping === 'class') {
+        if (!sd.teacher || !sd.classTime) return; // not a real class assignment
+        const key = _healthClassKey(sd);
+        if (!seen.has(key)) seen.set(key, `${sd.teacher} · ${sd.classTime} · ${sd.classLevel || '—'}`);
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  },
+
+  // Returns { dates, counts, enrolledTotal } for the given session/metric/
+  // grouping. dates is session.classDates as-is (trusted chronological,
+  // same assumption already made everywhere else classDates is used).
+  // counts is { present/absent/vacation -> [n per date] } for 'attendance',
+  // or { yes/no -> [n per date] } for 'homework' — 'unmarked'/'unknown'
+  // values are intentionally not tallied (nothing to plot for those).
+  healthTrend(sessionName, metric, grouping, groupKey) {
+    const sess = this.getSession(sessionName);
+    const dates = (sess?.classDates || []).slice();
+
+    const matchingSd = _cache.students
+      .filter(s => {
+        if (s.status !== 'Active') return false;
+        const sd = (s.sessionData || []).find(d => d.session === sessionName);
+        if (!sd) return false;
+        if (grouping === 'teacher') return (sd.teacher || '') === groupKey;
+        if (grouping === 'class')   return _healthClassKey(sd) === groupKey;
+        return true; // 'school'
+      })
+      .map(s => (s.sessionData || []).find(d => d.session === sessionName));
+
+    const valueKeys = metric === 'attendance' ? ['present', 'absent', 'vacation'] : ['yes', 'no'];
+    const counts = {};
+    valueKeys.forEach(k => counts[k] = dates.map(() => 0));
+
+    matchingSd.forEach(sd => {
+      const field = metric === 'attendance' ? (sd.attendance || {}) : (sd.homeworkDone || {});
+      dates.forEach((d, i) => {
+        const v = field[d];
+        if (v && counts[v]) counts[v][i]++;
+      });
+    });
+
+    return { dates, counts, enrolledTotal: matchingSd.length };
+  },
+
   // EXPORT / IMPORT
   exportJSON() {
     return JSON.stringify({
@@ -1298,7 +1371,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-09-26.8';
+const APP_VERSION = 'v2026-10-04.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1642,6 +1715,7 @@ function buildSidebar() {
     { id:'sessions', icon:'📅', label:'Sessions' },
     { id:'classes',  icon:'🏫', label:'Classes' },
     { id:'scoring-guide', icon:'📖', label:'Scoring guide' },
+    { id:'school-health', icon:'📈', label:'School Health' },
     ...(isAdmin ? [
       { id:'attributes', icon:'⚙️', label:'Settings', children: ATTR_TABS },
     ] : []),
@@ -1698,6 +1772,7 @@ function navigateTo(page) {
     sessions:    renderSessions,
     classes:     renderClasses,
     'scoring-guide': renderScoringGuide,
+    'school-health': renderSchoolHealth,
     attributes:  renderAttributesChooser,
     email:       renderEmail,
     templates:   renderTemplates,
@@ -7417,6 +7492,215 @@ function onAttSessionYearChange() {
     sessSel.value = match ? match.name : (termsInYear[0]?.name || '');
   }
   loadAttendanceClass();
+}
+
+// ── SCHOOL HEALTH — attendance/homework trend charts ──────────
+// Read-only for both teachers and admins. Admin may additionally edit
+// the one freeform note stored on the session (sessions.health_note).
+let _healthState = { session: '', metric: 'attendance', grouping: 'school', groupKey: '', series: 'present' };
+
+function renderSchoolHealth() {
+  const sessions = sortSessionsChronological(DB.getSessions());
+  const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
+  _healthState.session = activeSess?.name || '';
+  _healthState.metric = 'attendance';
+  _healthState.grouping = 'school';
+  _healthState.groupKey = '';
+  _healthState.series = 'present';
+
+  document.getElementById('content-area').innerHTML = `
+    <div class="page-header">
+      <div class="page-title">School Health</div>
+      <div class="page-subtitle">Attendance and homework trends — read-only</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="form-group" style="min-width:140px;">
+          <label class="form-label">Session</label>
+          <select class="form-select" id="health-session" onchange="onHealthSessionChange()">
+            ${sessions.map(s => `<option value="${escAttr(s.name)}" ${s.name === _healthState.session ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="min-width:130px;">
+          <label class="form-label">Metric</label>
+          <select class="form-select" id="health-metric" onchange="onHealthMetricChange()">
+            <option value="attendance" selected>Attendance</option>
+            <option value="homework">Homework</option>
+          </select>
+        </div>
+        <div class="form-group" style="min-width:130px;">
+          <label class="form-label">Group by</label>
+          <select class="form-select" id="health-grouping" onchange="onHealthGroupingChange()">
+            <option value="school" selected>Whole school</option>
+            <option value="teacher">Teacher</option>
+            <option value="class">Class</option>
+          </select>
+        </div>
+        <div class="form-group" id="health-groupkey-wrap" style="min-width:200px; display:none;">
+          <label class="form-label" id="health-groupkey-label">Teacher</label>
+          <select class="form-select" id="health-groupkey" onchange="onHealthGroupKeyChange()"></select>
+        </div>
+        <div class="form-group" style="min-width:110px;">
+          <label class="form-label">Show</label>
+          <select class="form-select" id="health-series" onchange="onHealthSeriesChange()"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div id="health-chart-wrap"></div>
+    </div>
+
+    <div class="card" id="health-note-card">
+      <div class="card-title">📌 Note for this session</div>
+      <div id="health-note-body"></div>
+    </div>
+  `;
+
+  _populateHealthSeriesOptions();
+  renderHealthNoteSection();
+  updateHealthChart();
+}
+
+function onHealthSessionChange() {
+  _healthState.session = document.getElementById('health-session').value;
+  _healthState.grouping = 'school';
+  _healthState.groupKey = '';
+  document.getElementById('health-grouping').value = 'school';
+  document.getElementById('health-groupkey-wrap').style.display = 'none';
+  renderHealthNoteSection();
+  updateHealthChart();
+}
+
+function onHealthMetricChange() {
+  _healthState.metric = document.getElementById('health-metric').value;
+  _populateHealthSeriesOptions();
+  updateHealthChart();
+}
+
+function onHealthGroupingChange() {
+  const grouping = document.getElementById('health-grouping').value;
+  _healthState.grouping = grouping;
+  const wrap  = document.getElementById('health-groupkey-wrap');
+  const label = document.getElementById('health-groupkey-label');
+  const sel   = document.getElementById('health-groupkey');
+
+  if (grouping === 'school') {
+    wrap.style.display = 'none';
+    _healthState.groupKey = '';
+  } else {
+    wrap.style.display = 'block';
+    label.textContent = grouping === 'teacher' ? 'Teacher' : 'Class';
+    const groups = DB.healthGroups(_healthState.session, grouping);
+    sel.innerHTML = groups.map(g => `<option value="${escAttr(g.key)}">${escHtml(g.label)}</option>`).join('');
+    _healthState.groupKey = groups[0]?.key || '';
+  }
+  updateHealthChart();
+}
+
+function onHealthGroupKeyChange() {
+  _healthState.groupKey = document.getElementById('health-groupkey').value;
+  updateHealthChart();
+}
+
+function onHealthSeriesChange() {
+  _healthState.series = document.getElementById('health-series').value;
+  updateHealthChart();
+}
+
+function _populateHealthSeriesOptions() {
+  const sel = document.getElementById('health-series');
+  const options = _healthState.metric === 'attendance'
+    ? [{ v:'present', l:'Present (P)' }, { v:'absent', l:'Absent (A)' }, { v:'vacation', l:'Excused (E)' }]
+    : [{ v:'yes', l:'Homework done' }, { v:'no', l:'Homework not done' }];
+  sel.innerHTML = options.map(o => `<option value="${o.v}">${o.l}</option>`).join('');
+  _healthState.series = options[0].v;
+}
+
+function updateHealthChart() {
+  const { session, metric, grouping, groupKey, series } = _healthState;
+  const trend = DB.healthTrend(session, metric, grouping, grouping === 'school' ? '' : groupKey);
+  document.getElementById('health-chart-wrap').innerHTML = _renderHealthChartSvg(trend, series, metric);
+}
+
+// Fixed y-axis (0..enrolledTotal), not auto-scaled to the observed max —
+// so the same count looks the same regardless of which date/group you're
+// viewing, and "everyone present" always reaches the top of the chart.
+function _renderHealthChartSvg(trend, seriesKey, metric) {
+  const { dates, counts, enrolledTotal } = trend;
+  if (!dates.length) {
+    return `<div style="color:var(--ink-light); font-size:13px; padding:20px 0;">This session has no class dates set yet.</div>`;
+  }
+  const values = counts[seriesKey] || dates.map(() => 0);
+  const maxY = Math.max(1, enrolledTotal);
+
+  const colorMap = { present:'var(--success)', absent:'var(--danger)', vacation:'var(--warning)', yes:'var(--success)', no:'var(--danger)' };
+  const color = colorMap[seriesKey] || 'var(--olive)';
+
+  const chartW = 900, chartH = 220, padL = 36, padB = 30, padT = 14;
+  const plotW = chartW - padL - 14, plotH = chartH - padB - padT;
+  const stepX = dates.length > 1 ? plotW / (dates.length - 1) : 0;
+
+  const xAt = i => padL + i * stepX;
+  const yAt = v => padT + (plotH - (v / maxY) * plotH);
+
+  const pointsAttr = values.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
+  const shortDate = d => { const m = d.match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? `${parseInt(m[1],10)}/${parseInt(m[2],10)}` : d; };
+  const showLabel = i => dates.length <= 12 || i % 2 === 0 || i === dates.length - 1;
+
+  const dotsAndLabels = values.map((v, i) => `
+    <circle cx="${xAt(i)}" cy="${yAt(v)}" r="3.5" fill="${color}">
+      <title>${escHtml(dates[i])}: ${v}</title>
+    </circle>
+    <text x="${xAt(i)}" y="${yAt(v) - 8}" font-size="10" text-anchor="middle" fill="var(--ink-mid)">${v}</text>
+    ${showLabel(i) ? `<text x="${xAt(i)}" y="${chartH - padB + 14}" font-size="9" text-anchor="middle" fill="var(--ink-light)">${shortDate(dates[i])}</text>` : ''}
+  `).join('');
+
+  return `
+    <div style="font-size:12px; color:var(--ink-light); margin-bottom:10px;">
+      Enrolled: ${enrolledTotal} &nbsp;·&nbsp; y-axis fixed at enrolled total, not observed max
+    </div>
+    <svg viewBox="0 0 ${chartW} ${chartH}" style="width:100%; height:auto; max-height:240px;">
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${chartH-padB}" stroke="var(--olive-mid)" stroke-width="1"/>
+      <line x1="${padL}" y1="${chartH-padB}" x2="${chartW-10}" y2="${chartH-padB}" stroke="var(--olive-mid)" stroke-width="1"/>
+      <text x="${padL-6}" y="${padT+4}" font-size="9" text-anchor="end" fill="var(--ink-light)">${maxY}</text>
+      <text x="${padL-6}" y="${chartH-padB}" font-size="9" text-anchor="end" fill="var(--ink-light)">0</text>
+      <polyline points="${pointsAttr}" fill="none" stroke="${color}" stroke-width="2"/>
+      ${dotsAndLabels}
+    </svg>
+    <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">Class date →</div>
+  `;
+}
+
+function renderHealthNoteSection() {
+  const sess = DB.getSession(_healthState.session);
+  const isAdmin = currentUser.role === 'admin';
+  const note = sess?.healthNote || '';
+  const body = document.getElementById('health-note-body');
+  if (!body) return;
+  body.innerHTML = isAdmin ? `
+    <textarea class="form-textarea" id="health-note-input" rows="3" placeholder="Optional note for this session, shown to teachers too…">${escHtml(note)}</textarea>
+    <div style="margin-top:8px;">
+      <button class="btn btn-primary btn-sm" onclick="saveHealthNote()">💾 Save note</button>
+      <span id="health-note-status" style="font-size:12px; color:var(--ink-light); margin-left:8px;"></span>
+    </div>
+  ` : (note
+      ? `<div style="font-size:13px; color:var(--ink); white-space:pre-wrap;">${escHtml(note)}</div>`
+      : `<div style="font-size:13px; color:var(--ink-light);">No note for this session.</div>`);
+}
+
+function saveHealthNote() {
+  const sess = DB.getSession(_healthState.session);
+  if (!sess) return;
+  const note = document.getElementById('health-note-input').value;
+  DB.saveSession({ ...sess, healthNote: note });
+  const status = document.getElementById('health-note-status');
+  if (status) {
+    status.textContent = '✓ Saved';
+    setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+  }
+  showToast('Note saved', 'success');
 }
 
 function renderAttendance() {
