@@ -1263,7 +1263,7 @@ const DB = {
   // for now; may become an admin-configurable setting later).
   // Returns [{ studentId, studentName, absentCount }], sorted by absentCount
   // descending.
-  auditAbsencesTotal(sessionName, grouping, groupKey, threshold = 1) { // TEMP: was 3, loosened for diagnostic check
+  auditAbsencesTotal(sessionName, grouping, groupKey, threshold = 3) {
     return _matchingStudents(sessionName, grouping, groupKey)
       .map(({ student, sd }) => {
         const absentCount = Object.values(sd.attendance || {}).filter(v => v === 'absent').length;
@@ -1282,7 +1282,7 @@ const DB = {
   // only consecutive 'absent' marks count. threshold defaults to 2.
   // Returns [{ studentId, studentName, consecutiveCount }], sorted by
   // consecutiveCount descending.
-  auditAbsencesConsecutive(sessionName, grouping, groupKey, threshold = 1) { // TEMP: was 2, loosened for diagnostic check
+  auditAbsencesConsecutive(sessionName, grouping, groupKey, threshold = 2) {
     const sess = this.getSession(sessionName);
     const today = _todayLocal();
     const pastDates = (sess?.classDates || []).filter(d => d <= today);
@@ -1315,7 +1315,7 @@ const DB = {
   // classes are checked, same convention as the other audit checks.
   // Returns [{ classKey, classLabel, date, presentCount, enrolledCount,
   // turnoutFraction }], sorted by turnoutFraction ascending (worst first).
-  auditLowTurnout(sessionName, grouping, groupKey, threshold = 1.0) { // TEMP: was 0.5, loosened for diagnostic check
+  auditLowTurnout(sessionName, grouping, groupKey, threshold = 0.5) {
     const sess = this.getSession(sessionName);
     const today = _todayLocal();
     const pastDates = (sess?.classDates || []).filter(d => d <= today);
@@ -1356,7 +1356,7 @@ const DB = {
   // Returns [{ classKey, classLabel, lastHomeworkDate, weeksSince }],
   // lastHomeworkDate is an ISO date string or null if never broadcast,
   // sorted with never-broadcast classes first, then oldest first.
-  auditMissingHomework(sessionName, grouping, groupKey, weeksThreshold = 0) { // TEMP: was 2, loosened for diagnostic check
+  auditMissingHomework(sessionName, grouping, groupKey, weeksThreshold = 2) {
     const today = new Date(_todayLocal());
     let classGroups = this.healthGroups(sessionName, 'class');
     if (grouping === 'class') {
@@ -1399,7 +1399,7 @@ const DB = {
   // class/teacher, same convention as the other audit checks.
   // weeksThreshold defaults to 3. Returns [{ studentId, studentName,
   // lastNoteDate, weeksSince }], sorted oldest first.
-  auditStaleNotes(sessionName, grouping, groupKey, weeksThreshold = 0) { // TEMP: was 3, loosened for diagnostic check
+  auditStaleNotes(sessionName, grouping, groupKey, weeksThreshold = 3) {
     const today = new Date(_todayLocal());
     return _matchingStudents(sessionName, grouping, groupKey)
       .map(({ student, sd }) => {
@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-04.9';
+const APP_VERSION = 'v2026-10-04.10';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7742,6 +7742,16 @@ function renderSchoolHealth() {
   _healthState.groupKey = '';
   _healthState.series = 'present';
 
+  // Landing default: a teacher lands pre-scoped to their own classes (same
+  // as Audit Logs), not "Whole school" — they can still change it freely,
+  // this only decides what they see first.
+  if (currentUser.role === 'teacher' && currentUser.name) {
+    _healthState.grouping = 'teacher';
+    _healthState.groupKey = currentUser.name;
+  }
+
+  const groupKeyOptions = _healthState.grouping === 'school' ? [] : DB.healthGroups(_healthState.session, _healthState.grouping);
+
   document.getElementById('content-area').innerHTML = `
     <div class="page-header">
       <div class="page-title">School Health</div>
@@ -7766,14 +7776,16 @@ function renderSchoolHealth() {
         <div class="form-group" style="min-width:130px;">
           <label class="form-label">Group by</label>
           <select class="form-select" id="health-grouping" onchange="onHealthGroupingChange()">
-            <option value="school" selected>Whole school</option>
-            <option value="teacher">Teacher</option>
-            <option value="class">Class</option>
+            <option value="school" ${_healthState.grouping === 'school' ? 'selected' : ''}>Whole school</option>
+            <option value="teacher" ${_healthState.grouping === 'teacher' ? 'selected' : ''}>Teacher</option>
+            <option value="class" ${_healthState.grouping === 'class' ? 'selected' : ''}>Class</option>
           </select>
         </div>
-        <div class="form-group" id="health-groupkey-wrap" style="min-width:200px; display:none;">
-          <label class="form-label" id="health-groupkey-label">Teacher</label>
-          <select class="form-select" id="health-groupkey" onchange="onHealthGroupKeyChange()"></select>
+        <div class="form-group" id="health-groupkey-wrap" style="min-width:200px; display:${_healthState.grouping === 'school' ? 'none' : 'block'};">
+          <label class="form-label" id="health-groupkey-label">${_healthState.grouping === 'class' ? 'Class' : 'Teacher'}</label>
+          <select class="form-select" id="health-groupkey" onchange="onHealthGroupKeyChange()">
+            ${groupKeyOptions.map(g => `<option value="${escAttr(g.key)}" ${g.key === _healthState.groupKey ? 'selected' : ''}>${escHtml(g.label)}</option>`).join('')}
+          </select>
         </div>
         <div class="form-group" style="min-width:110px;">
           <label class="form-label">Show</label>
