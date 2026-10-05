@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.3';
+const APP_VERSION = 'v2026-10-05.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9366,6 +9366,20 @@ function renderIntakeBioForm(student, isInterest) {
         <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. Speaks some Hindi at home, can read basic Devanagari, no prior formal instruction…"></textarea>
         <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">Required — the school will use this to assess your child's level before placement.</div>
       </div>
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
+        <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" onchange="onIntakeVolunteerChange()"/> Yes</label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" onchange="onIntakeVolunteerChange()"/> No</label>
+        </div>
+        <div id="ib-vol-roles" style="display:none; margin:0 0 8px 2px; font-size:14px; line-height:2;">
+          <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-aide" value="aide"/> Teacher's aide in the classroom</label>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-greeting" value="greeting"/> Greeting students as they arrive and leave</label>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-events" value="events"/> Helping with special events (Diwali, annual celebration, etc.)</label>
+        </div>
+        <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
+      </div>
     `;
   } else {
     // ── Returning student: only editable contact fields ───────
@@ -9408,6 +9422,16 @@ function renderIntakeBioForm(student, isInterest) {
       </div>
     `;
   }
+}
+
+// Interest form: show the volunteer-role checkboxes only for "Yes"; clear them on "No"
+function onIntakeVolunteerChange() {
+  const yes = document.getElementById('ib-vol-yes')?.checked;
+  const box = document.getElementById('ib-vol-roles');
+  if (box) box.style.display = yes ? 'block' : 'none';
+  if (!yes) ['aide','greeting','events'].forEach(r => {
+    const cb = document.getElementById('ib-vol-' + r); if (cb) cb.checked = false;
+  });
 }
 
 function setIntakeScore(type, val) {
@@ -9456,6 +9480,19 @@ async function intakeSaveBio() {
     if (notes.length < 20) {
       showToast('Please describe your child\'s Hindi background in a little more detail', 'error');
       document.getElementById('ib-notes')?.focus();
+      return;
+    }
+    // Volunteering: Yes/No required; if Yes, at least one role
+    const volYes = document.getElementById('ib-vol-yes')?.checked;
+    const volNo  = document.getElementById('ib-vol-no')?.checked;
+    if (!volYes && !volNo) {
+      showToast('Please tell us whether you\'d be willing to volunteer', 'error');
+      document.getElementById('ib-vol-yes')?.focus();
+      return;
+    }
+    if (volYes && !['aide','greeting','events'].some(r => document.getElementById('ib-vol-' + r)?.checked)) {
+      showToast('Please select at least one way you\'d be willing to help', 'error');
+      document.getElementById('ib-vol-aide')?.focus();
       return;
     }
   }
@@ -9530,6 +9567,11 @@ async function intakeSaveBio() {
       updated.intakeAssessed   = false;
       updated.intakeAssessedDate = '';
       updated.notes            = document.getElementById('ib-notes')?.value || '';
+      const _volWilling = !!document.getElementById('ib-vol-yes')?.checked;
+      updated.volunteering     = {
+        willing: _volWilling,
+        roles:   _volWilling ? ['aide','greeting','events'].filter(r => document.getElementById('ib-vol-' + r)?.checked) : [],
+      };
     } else if (updated.status === 'Invited') {
       if (!s.intakeAssessed) {
         // Intake assessment not yet completed — hold at Invited, show message on confirmation screen
