@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.5';
+const APP_VERSION = 'v2026-10-05.6';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9038,8 +9038,18 @@ async function _intakeLookupCore() {
 
       // ── Case 5: Interest (already registered) ─────────────────
       if (student.status === 'Interest') {
-        renderIntakeContactSchool(student, 'interest');
-        intakeGoStep('1c');
+        // Assessed → locked (admin can reset via the 🔒 badge); otherwise parent may edit
+        if (student.intakeAssessed) {
+          renderIntakeContactSchool(student, 'interest');
+          intakeGoStep('1c');
+          return;
+        }
+        intakeState.student        = student;
+        intakeState.isNew          = false;
+        intakeState.isInterest     = true;
+        intakeState.isInterestEdit = true;
+        renderIntakeBioForm(student, true);
+        intakeGoStep(2);
         return;
       }
 
@@ -9051,6 +9061,8 @@ async function _intakeLookupCore() {
       // Not found — offer interest registration
       intakeState.isNew       = true;
       intakeState.isInterest  = true;
+      intakeState.isInterestEdit = false;
+      intakeState.student     = null;
       intakeState.parentEmail = parentEmail;
       intakeState.parentName  = parentName;
       intakeState.studentName = studentName;
@@ -9281,11 +9293,16 @@ function renderIntakeBioForm(student, isInterest) {
   const activeSess = SessionEngine.getActiveSession();
   const sessName = activeSess?.name || '';
   const enrolling = !isInterest && sessName;
+  const isEdit = !!(isInterest && intakeState.isInterestEdit);
 
-  document.getElementById('intake-step2-title').textContent = isInterest
+  document.getElementById('intake-step2-title').textContent = isEdit
+    ? 'Update your interest'
+    : isInterest
     ? 'Register your interest'
     : enrolling ? 'Enroll for ' + sessName : 'Update your information';
-  document.getElementById('intake-step2-subtitle').textContent = isInterest
+  document.getElementById('intake-step2-subtitle').textContent = isEdit
+    ? 'Please review your details below and update anything that has changed.'
+    : isInterest
     ? 'Please fill in your details. The school will follow up to confirm enrollment.'
     : enrolling
       ? 'Please review your contact details and complete enrollment for ' + sessName + '.'
@@ -9293,7 +9310,9 @@ function renderIntakeBioForm(student, isInterest) {
 
   const saveBtn = document.getElementById('intake-save-btn');
   if (saveBtn) {
-    saveBtn.textContent = isInterest
+    saveBtn.textContent = isEdit
+      ? 'Update →'
+      : isInterest
       ? 'Register interest →'
       : enrolling
         ? 'Enroll for ' + sessName + ' →'
@@ -9301,6 +9320,10 @@ function renderIntakeBioForm(student, isInterest) {
   }
 
   const studentNameParts = (intakeState.studentName||'').split(' ');
+  const _vol      = s.volunteering || {};
+  const _volYes   = _vol.willing === true;
+  const _volNo    = _vol.willing === false;
+  const _volRoles = Array.isArray(_vol.roles) ? _vol.roles : [];
 
   if (isInterest) {
     // ── Full form for new interest registrations ──────────────
@@ -9362,22 +9385,22 @@ function renderIntakeBioForm(student, isInterest) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Tell us about your child's Hindi background <span style="color:var(--danger);">*</span></label>
+        <label class="form-label">${isEdit ? "What's new with your child's Hindi background?" : "Tell us about your child's Hindi background"} <span style="color:var(--danger);">*</span></label>
         <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. Speaks some Hindi at home, can read basic Devanagari, no prior formal instruction…"></textarea>
-        <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">Required — the school will use this to assess your child's level before placement.</div>
+        <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — the school will use this to assess your child's level before placement."}</div>
       </div>
       <div class="form-group" style="margin-top:16px;">
         <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
         <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
         <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" onchange="onIntakeVolunteerChange()"/> Yes</label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" onchange="onIntakeVolunteerChange()"/> No</label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" ${_volYes ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> Yes</label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" ${_volNo ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> No</label>
         </div>
-        <div id="ib-vol-roles" style="display:none; margin:0 0 8px 2px; font-size:14px; line-height:2;">
+        <div id="ib-vol-roles" style="display:${_volYes ? 'block' : 'none'}; margin:0 0 8px 2px; font-size:14px; line-height:2;">
           <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-aide" value="aide"/> Teacher's aide in the classroom</label>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-greeting" value="greeting"/> Greeting students as they arrive and leave</label>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-events" value="events"/> Helping with special events (Diwali, annual celebration, etc.)</label>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-aide" value="aide" ${_volRoles.includes('aide') ? 'checked' : ''}/> Teacher's aide in the classroom</label>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-greeting" value="greeting" ${_volRoles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
+          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-events" value="events" ${_volRoles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
         </div>
       </div>
     `;
@@ -9444,6 +9467,7 @@ async function intakeSaveBio() {
   const s = intakeState.student || { id: 'std_' + Date.now(), sessionData: [] };
   const altName = (document.getElementById('ib-altName')?.value || '').split(' ');
   const isReturning = !intakeState.isInterest && !intakeState.isNew;
+  const isInterestEdit = !!(intakeState.isInterest && intakeState.isInterestEdit);
 
   // ── Validation for interest registrations ───────────────────
   if (intakeState.isInterest) {
@@ -9559,14 +9583,22 @@ async function intakeSaveBio() {
     };
 
     if (intakeState.isInterest) {
-      updated.status           = 'Interest';
-      updated.studentId        = '';
-      updated.speakingScore    = 0;
-      updated.readingScore     = 0;
-      updated.writingScore     = 0;
-      updated.intakeAssessed   = false;
-      updated.intakeAssessedDate = '';
-      updated.notes            = document.getElementById('ib-notes')?.value || '';
+      if (isInterestEdit) {
+        // Existing Interest record: keep status, studentId, scores and assessed flag as on file;
+        // append the parent's new note (existing notes are never shown to or overwritten by the parent)
+        const _d    = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const _line = `Parent update (${_d}): ${(document.getElementById('ib-notes')?.value || '').trim()}`;
+        updated.notes = s.notes ? `${s.notes}\n\n${_line}` : _line;
+      } else {
+        updated.status           = 'Interest';
+        updated.studentId        = '';
+        updated.speakingScore    = 0;
+        updated.readingScore     = 0;
+        updated.writingScore     = 0;
+        updated.intakeAssessed   = false;
+        updated.intakeAssessedDate = '';
+        updated.notes            = document.getElementById('ib-notes')?.value || '';
+      }
       const _volWilling = !!document.getElementById('ib-vol-yes')?.checked;
       updated.volunteering     = {
         willing: _volWilling,
@@ -9613,8 +9645,24 @@ async function intakeSaveBio() {
     return;
   }
   intakeState.savedStudent = updated;
-  renderIntakeConfirmation(updated);
+  if (isInterestEdit) renderIntakeInterestUpdated(updated);
+  else renderIntakeConfirmation(updated);
   intakeGoStep(3);
+}
+
+function renderIntakeInterestUpdated(student) {
+  document.getElementById('intake-confirmation').innerHTML = `
+    <div style="text-align:center; margin-bottom:20px;">
+      <div style="font-size:48px; margin-bottom:8px;">✅</div>
+      <div style="font-family:var(--serif); font-size:24px; font-weight:600; color:var(--olive);">
+        Interest updated for ${escHtml(student.firstName)}!
+      </div>
+    </div>
+    <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px; line-height:1.7;">
+      Thank you — we have received your update. The HKN team will reach out by email when enrollment opens.
+      Questions? Contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+    </div>
+  `;
 }
 
 function renderIntakeConfirmation(student) {
