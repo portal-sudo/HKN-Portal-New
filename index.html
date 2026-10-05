@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-04.10';
+const APP_VERSION = 'v2026-10-05.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2953,6 +2953,44 @@ function scoreBar(val) {
 }
 
 // ── STUDENT MODAL ─────────────────────────────────────────────
+// Admin-only: undo an intake assessment (clear the assessed flag, its date,
+// and all three baseline scores). Triggered by clicking the "Assessed" lock
+// badge in the student modal. Saves immediately, then re-opens the modal so
+// the Intake assessment box shows in its unlocked state — any unsaved edits
+// in the open modal are lost, which the confirm text warns about.
+function resetIntakeAssessment(studentId) {
+  if (currentUser.role !== 'admin') return;
+  const s = DB.getStudent(studentId);
+  if (!s || !s.intakeAssessed) return;
+  showConfirm(
+    '🔓', 'Reset intake assessment?',
+    `<div style="text-align:left; font-size:13px; color:var(--ink-mid); line-height:1.7;">
+      This clears the assessed lock and sets speaking, reading and writing scores back to 0 for
+      <strong>${escHtml(s.firstName)} ${escHtml(s.lastName)}</strong>.<br/><br/>
+      Any other unsaved changes in the student form will be lost — save them first if needed.
+    </div>`,
+    'Reset assessment', 'btn-danger',
+    () => {
+      const cur = DB.getStudent(studentId);
+      if (!cur) return;
+      DB.saveStudent({
+        ...cur,
+        intakeAssessed:     false,
+        intakeAssessedDate: '',
+        speakingScore:      0,
+        readingScore:       0,
+        writingScore:       0,
+      });
+      closeModal();
+      openStudentModal(studentId);
+      // Re-opened modal starts with its sections collapsed — expand the one
+      // holding the assessment so the unlocked state is visible right away.
+      document.getElementById('sf-intakeAssessed')?.closest('details')?.setAttribute('open', '');
+      showToast('Intake assessment reset', 'success');
+    }
+  );
+}
+
 function openStudentModal(studentId) {
   const student = studentId ? DB.getStudent(studentId) : null;
   const isNew   = !student;
@@ -3292,7 +3330,10 @@ function openStudentModal(studentId) {
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
             <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em;">Intake assessment</div>
             ${s.intakeAssessed
-              ? `<span style="font-size:11px; color:var(--success); font-weight:600;">🔒 Assessed ${s.intakeAssessedDate ? new Date(s.intakeAssessedDate).toLocaleDateString() : ''}</span>`
+              ? (isAdmin
+                  // Admin only: clicking the lock badge offers to reset the assessment
+                  ? `<span onclick="resetIntakeAssessment('${escAttr(s.id)}')" title="Click to reset this intake assessment" style="font-size:11px; color:var(--success); font-weight:600; cursor:pointer; text-decoration:underline dotted;">🔒 Assessed ${s.intakeAssessedDate ? new Date(s.intakeAssessedDate).toLocaleDateString() : ''}</span>`
+                  : `<span style="font-size:11px; color:var(--success); font-weight:600;">🔒 Assessed ${s.intakeAssessedDate ? new Date(s.intakeAssessedDate).toLocaleDateString() : ''}</span>`)
               : `<span style="font-size:11px; color:var(--warning); font-weight:600;">⏳ Pending review</span>`
             }
           </div>
