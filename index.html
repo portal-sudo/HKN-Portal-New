@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.1';
+const APP_VERSION = 'v2026-10-05.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6390,6 +6390,7 @@ const SupabaseSync = {
         statusHistory:        row.status_history || [],
         lastParentAccess:     row.last_parent_access || null,
         photoPath:            row.photo_path || null,
+        volunteering:         row.volunteering || null,
       }));
 
       // ── Reassemble sessions — restore camelCase shape DB expects ──
@@ -6719,6 +6720,7 @@ const SupabaseSync = {
       status_history:         s.statusHistory         || [],
       last_parent_access:     s.lastParentAccess      || null,
       photo_path:             s.photoPath             || null,
+      volunteering:           s.volunteering          || null,
       updated_at:             new Date().toISOString(),
     };
   },
@@ -8959,6 +8961,10 @@ async function _intakeLookupCore() {
         dob:                  found.dob,
         address:              found.address,
         grade:                found.grade,
+        altContactFirstName:  found.alt_contact_first_name,
+        altContactLastName:   found.alt_contact_last_name,
+        altContactEmail:      found.alt_contact_email,
+        altContactPhone:      found.alt_contact_phone,
         speakingScore:        found.speaking_score,
         readingScore:         found.reading_score,
         writingScore:         found.writing_score,
@@ -8968,6 +8974,7 @@ async function _intakeLookupCore() {
         timestamp:            found.timestamp,
         sessionData:          found.session_data   || [],
         statusHistory:        found.status_history || [],
+        volunteering:         found.volunteering || null,
       };
 
       // Record parent portal access timestamp — fire and forget, non-blocking

@@ -130,6 +130,7 @@ create table if not exists students (
   status_history          jsonb not null default '[]'::jsonb,
   last_parent_access      timestamptz,
   photo_path              text,
+  volunteering            jsonb,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
 );
@@ -143,6 +144,7 @@ create table if not exists sessions (
   class_dates      date[] default '{}'::date[],
   class_notes      jsonb default '{}'::jsonb,
   refunds          jsonb default '[]'::jsonb,
+  health_note      text,
   created_at       timestamptz not null default now()
 );
 
@@ -433,6 +435,7 @@ begin
     notes, "timestamp",
     session_data, status_history,
     last_parent_access,
+    volunteering,
     updated_at
   ) values (
     s->>'id',
@@ -461,6 +464,7 @@ begin
     coalesce((s->'sessionData')::jsonb, '[]'::jsonb),
     coalesce((s->'statusHistory')::jsonb, '[]'::jsonb),
     now(),
+    nullif((s->'volunteering')::jsonb, 'null'::jsonb),
     now()
   )
   on conflict (id) do update set
@@ -483,6 +487,7 @@ begin
     session_data           = excluded.session_data,
     status_history          = excluded.status_history,
     last_parent_access      = now(),
+    volunteering            = coalesce(excluded.volunteering, students.volunteering),
     updated_at              = now();
 
   return json_build_object('saved', true, 'id', s->>'id');
