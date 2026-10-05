@@ -1603,7 +1603,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.4';
+const APP_VERSION = 'v2026-10-05.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9368,6 +9368,7 @@ function renderIntakeBioForm(student, isInterest) {
       </div>
       <div class="form-group" style="margin-top:16px;">
         <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
+        <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
         <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" onchange="onIntakeVolunteerChange()"/> Yes</label>
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" onchange="onIntakeVolunteerChange()"/> No</label>
@@ -9378,7 +9379,6 @@ function renderIntakeBioForm(student, isInterest) {
           <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-greeting" value="greeting"/> Greeting students as they arrive and leave</label>
           <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-events" value="events"/> Helping with special events (Diwali, annual celebration, etc.)</label>
         </div>
-        <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
       </div>
     `;
   } else {
