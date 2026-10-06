@@ -243,6 +243,7 @@ create table if not exists book_teacher_copies (
 
 alter table admins   add column if not exists last_login timestamptz;
 alter table students add column if not exists photo_path text;
+alter table students add column if not exists volunteering jsonb;
 alter table teachers add column if not exists last_login timestamptz;
 alter table settings add column if not exists interest_confirmation_message text;
 
