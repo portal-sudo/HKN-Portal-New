@@ -95,6 +95,13 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--olive-mid);
 }
 .btn-secondary:hover { background: var(--olive-pale); border-color: var(--olive-light); }
+/* Parent-portal form buttons: tinted so Back / Cancel read as buttons without competing with the orange primary */
+.btn-intake-back   { background: var(--olive-mid); border-color: #C9C8AE; color: var(--olive); }
+.btn-intake-back:hover   { background: #D3D2BA; border-color: #BDBCA0; }
+.btn-intake-cancel { background: var(--danger-light); border-color: #E8B4AE; color: var(--danger); }
+.btn-intake-cancel:hover { background: #FADBD8; border-color: #DE9A92; }
+.btn-intake-update { background: #A9D8A3; border: 1px solid #86C27F; color: #14501F; font-weight: 600; box-shadow: 0 2px 8px rgba(60,140,60,0.2); }
+.btn-intake-update:hover { background: #98CE91; box-shadow: 0 4px 12px rgba(60,140,60,0.3); }
 .btn-ghost { background: transparent; color: var(--olive); padding: 6px 12px; }
 .btn-ghost:hover { background: var(--olive-pale); }
 .btn-danger { background: var(--danger); color: white; }
@@ -527,8 +534,8 @@ tbody tr { transition: background var(--transition); }
       <div class="intake-step-subtitle" id="intake-step2-subtitle">Please verify and complete the information below.</div>
       <div id="intake-bio-form"></div>
       <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
-        <button class="btn btn-secondary" id="intake-cancel-btn" style="display:none; margin-right:auto; color:var(--danger);" onclick="intakeCancelInterest()">Cancel my interest</button>
-        <button class="btn btn-secondary" onclick="intakeGoStep(1)">← Back</button>
+        <button class="btn btn-secondary btn-intake-back" id="intake-back-btn" onclick="intakeGoStep(1)">← Back</button>
+        <button class="btn btn-secondary btn-intake-cancel" id="intake-cancel-btn" style="display:none;" onclick="intakeCancelInterest()">Cancel my interest</button>
         <button class="btn btn-primary" id="intake-save-btn" onclick="intakeSaveBio()">Save & Continue →</button>
       </div>
     </div>
@@ -1604,7 +1611,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.9';
+const APP_VERSION = 'v2026-10-05.12';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9335,9 +9342,13 @@ function renderIntakeBioForm(student, isInterest) {
 
   const cancelBtn = document.getElementById('intake-cancel-btn');
   if (cancelBtn) cancelBtn.style.display = isEdit ? '' : 'none';
+  // Edit form: Back sits at the far left, Cancel + Update stay together on the right
+  const backBtn = document.getElementById('intake-back-btn');
+  if (backBtn) backBtn.style.marginRight = isEdit ? 'auto' : '';
 
   const saveBtn = document.getElementById('intake-save-btn');
   if (saveBtn) {
+    saveBtn.classList.toggle('btn-intake-update', isEdit);   // green "Update" only on the existing-Interest edit form
     saveBtn.textContent = isEdit
       ? 'Update →'
       : isInterest
