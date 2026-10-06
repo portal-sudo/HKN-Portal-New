@@ -527,6 +527,7 @@ tbody tr { transition: background var(--transition); }
       <div class="intake-step-subtitle" id="intake-step2-subtitle">Please verify and complete the information below.</div>
       <div id="intake-bio-form"></div>
       <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+        <button class="btn btn-secondary" id="intake-cancel-btn" style="display:none; margin-right:auto; color:var(--danger);" onclick="intakeCancelInterest()">Cancel my interest</button>
         <button class="btn btn-secondary" onclick="intakeGoStep(1)">← Back</button>
         <button class="btn btn-primary" id="intake-save-btn" onclick="intakeSaveBio()">Save & Continue →</button>
       </div>
@@ -1603,7 +1604,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-05.6';
+const APP_VERSION = 'v2026-10-05.9';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2820,6 +2821,7 @@ function renderStudentTable() {
         va = (sdAl.classLevel||'').toLowerCase(); vb = (sdBl.classLevel||'').toLowerCase(); break;
       }
       case 'date':    va = a.timestamp||''; vb = b.timestamp||''; break;
+      case 'lastaccess': va = a.lastParentAccess||''; vb = b.lastParentAccess||''; break;   // never-visited ('') sorts first when ascending
       case 'age':     va = a.dob||''; vb = b.dob||''; break;
       default:        va = ''; vb = '';
     }
@@ -2873,6 +2875,7 @@ function renderStudentTable() {
     th('id','ID') + th('name','Student name') + th('parent','Parent') + th('status','Status') +
     th('age', 'Age — DoB') +
     (isDateMode  ? th('date', dateColLabel) : '') +
+    (isDateMode  ? th('lastaccess', 'Last portal visit') : '') +
     (showSession ? th('session','Session') : '') +
     (showTeacher ? th('teacher','Teacher') : '') +
     (showLevel   ? th('level','Level')   : '') +
@@ -2881,7 +2884,7 @@ function renderStudentTable() {
   const tbody = document.getElementById('student-tbody');
   if (!tbody) return;
 
-  const colCount = 5 + 1 + (isDateMode ? 1 : 0) + (showSession ? 1 : 0) + (showTeacher ? 1 : 0) +
+  const colCount = 5 + 1 + (isDateMode ? 2 : 0) + (showSession ? 1 : 0) + (showTeacher ? 1 : 0) +
                    (showLevel ? 1 : 0) + 1;
 
   if (students.length === 0) {
@@ -2912,6 +2915,9 @@ function renderStudentTable() {
       dateCell = `<td style="font-size:12px; color:var(--ink-light);">${d}</td>`;
     }
 
+    const visitCell = isDateMode
+      ? `<td style="font-size:12px; white-space:nowrap; color:var(--ink-light);">${s.lastParentAccess ? new Date(s.lastParentAccess).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'Never'}</td>`
+      : '';
     const sessionCell  = showSession ? `<td style="font-size:12px;">${sd.session || '—'}</td>` : '';
     const teacherCell  = showTeacher ? `<td style="font-size:12px;">${sd.teacher || '—'}</td>` : '';
     const levelCell    = showLevel   ? `<td style="font-size:12px;">${sd.classLevel || '—'}</td>` : '';
@@ -2924,7 +2930,7 @@ function renderStudentTable() {
         <td style="font-weight:500;">${s.firstName} ${s.lastName}</td>
         <td style="color:var(--ink-light);">${s.parentFirstName} ${s.parentLastName}</td>
         <td><span class="badge badge-${(s.status||'').toLowerCase().replace('-','').replace(' ','')}">${s.status}</span></td>
-        ${dobCell}${dateCell}${sessionCell}${teacherCell}${levelCell}
+        ${dobCell}${dateCell}${visitCell}${sessionCell}${teacherCell}${levelCell}
         <td onclick="event.stopPropagation();"></td>
       </tr>
     `;
@@ -2950,6 +2956,16 @@ function scoreBar(val) {
     dots += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 1px;background:${i<=filled?'var(--orange)':'var(--olive-mid)'};"></span>`;
   }
   return `<span style="display:inline-flex; align-items:center;">${dots}</span>`;
+}
+
+// Read-only text for a student's volunteering answer (students.volunteering jsonb)
+//   null → never asked; {willing:false} → No; {willing:true, roles:[…]} → Yes + role labels
+function volunteeringSummaryHtml(v) {
+  if (!v || typeof v.willing !== 'boolean') return '<span style="color:var(--ink-light);">Not asked yet</span>';
+  if (!v.willing) return 'No';
+  const labels = { aide: "Teacher's aide", greeting: 'Greeting students', events: 'Special events' };
+  const roles = (Array.isArray(v.roles) ? v.roles : []).map(r => escHtml(labels[r] || r));
+  return 'Yes' + (roles.length ? ' — ' + roles.join(', ') : '');
 }
 
 // ── STUDENT MODAL ─────────────────────────────────────────────
@@ -3278,9 +3294,10 @@ function openStudentModal(studentId) {
             <div style="display:flex; flex-direction:column; gap:6px;">
               ${s.statusHistory.map((h, i) => {
                 const triggerLabel = h.trigger === 'intake' ? 'Parent intake form'
+                  : h.trigger === 'parent-cancelled' ? 'Parent (cancelled via portal)'
                   : h.trigger === 'fees-verified' ? 'Fees verified'
                   : 'Admin';
-                const triggerColor = h.trigger === 'intake' ? 'var(--olive)'
+                const triggerColor = (h.trigger === 'intake' || h.trigger === 'parent-cancelled') ? 'var(--olive)'
                   : h.trigger === 'fees-verified' ? 'var(--success)'
                   : 'var(--orange-dark)';
                 return `<div style="display:flex; align-items:center; gap:10px; font-size:12px;">
@@ -3324,6 +3341,14 @@ function openStudentModal(studentId) {
             </div>
           </div>
         </details>
+
+        <!-- VOLUNTEERING (read-only; answered by parents on the interest form) -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Volunteering</div>
+          <div style="padding:9px 12px; background:var(--olive-pale); border:1px solid var(--olive-mid); border-radius:var(--radius-md); color:var(--ink-mid); font-size:14px;">
+            ${volunteeringSummaryHtml(s.volunteering)}
+          </div>
+        </div>
 
         <!-- INTAKE ASSESSMENT (top-level scores, admin-assigned once) -->
         <div style="background:var(--cream-dark); border-radius:var(--radius-md); padding:14px 18px; margin-bottom:20px;">
@@ -9308,6 +9333,9 @@ function renderIntakeBioForm(student, isInterest) {
       ? 'Please review your contact details and complete enrollment for ' + sessName + '.'
       : 'Please review and update your contact information below.';
 
+  const cancelBtn = document.getElementById('intake-cancel-btn');
+  if (cancelBtn) cancelBtn.style.display = isEdit ? '' : 'none';
+
   const saveBtn = document.getElementById('intake-save-btn');
   if (saveBtn) {
     saveBtn.textContent = isEdit
@@ -9648,6 +9676,46 @@ async function intakeSaveBio() {
   if (isInterestEdit) renderIntakeInterestUpdated(updated);
   else renderIntakeConfirmation(updated);
   intakeGoStep(3);
+}
+
+// Parent withdraws an existing Interest registration: status → Dropped, with history + note entries
+function intakeCancelInterest() {
+  const s = intakeState.student;
+  if (!(intakeState.isInterest && intakeState.isInterestEdit && s && s.id)) return;
+  const firstName = s.firstName || 'your child';
+  showConfirm('⚠️', 'Cancel your interest?',
+    `This will withdraw ${escHtml(firstName)}'s interest in Hindi Ki Neev. If you change your mind later, you will need to contact the school.`,
+    'Yes, cancel my interest', 'btn-danger', async () => {
+      const now  = new Date();
+      const _d   = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const line = `Parent update (${_d}): Cancelled interest via the portal.`;
+      const updated = {
+        ...s,
+        status: 'Dropped',
+        statusHistory: [...(s.statusHistory || []), { status: 'Dropped', date: now.toISOString(), trigger: 'parent-cancelled' }],
+        notes: s.notes ? `${s.notes}\n\n${line}` : line,
+      };
+      const { error } = await _supabase.rpc('save_student_from_intake', { student_json: updated });
+      if (error) {
+        console.warn('save_student_from_intake error:', error.message);
+        showToast('Could not cancel your interest. Please try again.', 'error');
+        return;
+      }
+      intakeState.savedStudent = updated;
+      document.getElementById('intake-confirmation').innerHTML = `
+        <div style="text-align:center; margin-bottom:20px;">
+          <div style="font-size:48px; margin-bottom:8px;">👋</div>
+          <div style="font-family:var(--serif); font-size:24px; font-weight:600; color:var(--olive);">
+            Interest cancelled for ${escHtml(firstName)}
+          </div>
+        </div>
+        <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px; line-height:1.7;">
+          We have withdrawn your interest. Thank you for letting us know. If you change your mind,
+          please contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+        </div>
+      `;
+      intakeGoStep(3);
+    });
 }
 
 function renderIntakeInterestUpdated(student) {
