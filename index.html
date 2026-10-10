@@ -1611,7 +1611,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-09.1';
+const APP_VERSION = 'v2026-10-10.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7271,9 +7271,9 @@ async function sendEmailGmail() {
     if (progBar)  progBar.style.width = pct + '%';
     if (progLabel) progLabel.textContent = `Sending ${i+1} of ${students.length}: ${s.firstName} ${s.lastName}…`;
 
-    // Resolve placeholders per-student if admin, raw body for teacher
-    const resolvedBody    = isAdmin ? resolvePlaceholders(body, s)    : body;
-    const resolvedSubject = isAdmin ? resolvePlaceholders(subject, s) : subject;
+    // Resolve merge fields per-student (admins and teachers alike)
+    const resolvedBody    = resolvePlaceholders(body, s);
+    const resolvedSubject = resolvePlaceholders(subject, s);
 
     try {
       await GMAIL.sendOne({ to: s.parentEmail, subject: resolvedSubject, body: resolvedBody });
@@ -7355,8 +7355,7 @@ async function sendEmailGmail() {
       '<div style="font-size:12px; color:var(--ink-light); margin-bottom:10px;">Click each button to open WhatsApp with the message pre-filled for that parent.</div>' +
       students.map(s => {
         const phone = (s.phone || '').replace(/\D/g,'');
-        const isAdmin = currentUser.role === 'admin';
-        const msg = encodeURIComponent(isAdmin ? resolvePlaceholders(body, s) : body);
+        const msg = encodeURIComponent(resolvePlaceholders(body, s));
         const waUrl = phone ? `https://wa.me/1${phone}?text=${msg}` : '';
         return '<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--cream-dark);">' +
           '<span style="font-size:13px;">' + escHtml(s.firstName) + ' ' + escHtml(s.lastName) +
