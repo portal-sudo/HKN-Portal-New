@@ -945,11 +945,36 @@ on conflict (session, book_level, book_type) do nothing;
 
 
 -- =====================================================================
+-- DATA API GRANTS
+-- Supabase stopped auto-granting Data API access to new "public" tables
+-- on Oct 30, 2026. Existing databases keep their current grants, but a
+-- fresh project, preview branch or db reset built from this file needs
+-- these explicit grants or the app gets "permission denied".
+-- Row-level security (policies above) still decides which rows each
+-- role can see or change. "anon" intentionally gets NO table grants: the
+-- parent portal only calls the 3 functions granted to it earlier.
+-- Safe to re-run on an existing database (re-granting changes nothing).
+-- teacher_presence already has its authenticated grant next to its policies.
+-- =====================================================================
+grant select, insert, update, delete on
+  admins, teachers, students, sessions, templates, settings,
+  lookup_config, scoring_guide, book_inventory, book_replacements,
+  book_teacher_copies
+to authenticated;
+
+grant select, insert, update, delete on
+  admins, teachers, students, sessions, templates, settings,
+  lookup_config, scoring_guide, book_inventory, book_replacements,
+  book_teacher_copies, teacher_presence
+to service_role;
+
+
+-- =====================================================================
 -- VERIFY — run these after the script completes
 -- =====================================================================
 -- select count(*) from admins;         -- expect 2
 -- select count(*) from settings;       -- expect 1
 -- select count(*) from scoring_guide;  -- expect 9
 -- select count(*) from book_inventory; -- expect 10
--- select table_name from information_schema.tables where table_schema='public' order by table_name; -- expect 11 tables
+-- select table_name from information_schema.tables where table_schema='public' order by table_name; -- expect 12 tables
 -- select routine_name from information_schema.routines where routine_schema='public' order by routine_name; -- expect 8 functions
