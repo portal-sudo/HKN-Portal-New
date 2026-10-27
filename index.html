@@ -1338,6 +1338,48 @@ const DB = {
       .sort((a, b) => b.excusedCount - a.excusedCount || a.studentName.localeCompare(b.studentName));
   },
 
+  // Audit check: students who missed >= threshold classes in this session,
+  // counting BOTH unexcused ('absent') and excused ('vacation') absences, on
+  // class dates up to and including today. A student is listed once, with the
+  // split, the dates (oldest first, each tagged excused or not) and the longest
+  // run of back-to-back missed classes (absent or excused; a present or blank
+  // mark breaks the run). grouping/groupKey optionally scope to one
+  // class/teacher, same convention as the other audit checks. threshold
+  // defaults to 2; the Audit page lets the user change it.
+  // Returns [{ id, studentId, studentName, missedCount, absentCount,
+  // excusedCount, longestRun, dates: [{ date, excused }] }], most missed first.
+  auditMissedClasses(sessionName, grouping, groupKey, threshold = 2) {
+    const sess = this.getSession(sessionName);
+    const today = _todayLocal();
+    const classDates = (sess?.classDates || []).filter(d => d <= today).sort();
+    if (!classDates.length) return [];
+    return _matchingStudents(sessionName, grouping, groupKey)
+      .map(({ student, sd }) => {
+        const att = sd.attendance || {};
+        const dates = [];
+        let run = 0, longestRun = 0;
+        classDates.forEach(date => {
+          const v = att[date];
+          if (v === 'absent' || v === 'vacation') {
+            dates.push({ date, excused: v === 'vacation' });
+            run++;
+            if (run > longestRun) longestRun = run;
+          } else {
+            run = 0;
+          }
+        });
+        const excusedCount = dates.filter(x => x.excused).length;
+        return {
+          id: student.id, studentId: student.studentId,
+          studentName: `${student.firstName} ${student.lastName}`,
+          missedCount: dates.length, absentCount: dates.length - excusedCount,
+          excusedCount, longestRun, dates,
+        };
+      })
+      .filter(r => r.missedCount >= threshold)
+      .sort((a, b) => b.missedCount - a.missedCount || a.studentName.localeCompare(b.studentName));
+  },
+
   // Audit check: classes whose most recent homework broadcast (see
   // saveHomeworkNoteToClass) is more than weeksThreshold weeks old, or that
   // have never had one. Homework broadcasts are written into every
@@ -1598,7 +1640,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.4';
+const APP_VERSION = 'v2026-10-27.6';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -8045,7 +8087,7 @@ function saveHealthNote() {
 // mirroring the audit-function convention, but deliberately NOT reusing
 // _healthState — these are six independent checks, not a single
 // metric/series pair.
-let _auditState = { session: '', grouping: '', groupKey: '' };
+let _auditState = { session: '', grouping: '', groupKey: '', missedN: 2 };
 
 // Default filter for the current _auditState.session: a teacher starts on their
 // own classes, everyone else (admin/viewer) on the whole school. If the teacher
@@ -8068,6 +8110,7 @@ function renderAuditLogs() {
   const sessions = sortSessionsChronological(DB.getSessions());
   const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
   _auditState.session = activeSess?.name || '';
+  _auditState.missedN = 2; // "Missed classes" threshold starts at 2 each time the page opens
   _auditApplyDefaultFilter();
 
   document.getElementById('content-area').innerHTML = `
@@ -8121,6 +8164,12 @@ function onAuditSessionChange() {
   renderAuditPanels();
 }
 
+function onAuditMissedNChange(val) {
+  const n = parseInt(val, 10);
+  _auditState.missedN = n >= 1 ? n : 2;
+  renderAuditPanels();
+}
+
 function onAuditFilterChange() {
   const val = document.getElementById('audit-filter').value;
   if (!val) {
@@ -8140,6 +8189,8 @@ function renderAuditPanels() {
   const { session, grouping, groupKey } = _auditState;
 
   const unmarked   = DB.auditAttendanceUnmarked(session, grouping, groupKey);
+  const missedN    = _auditState.missedN || 2;
+  const missed     = DB.auditMissedClasses(session, grouping, groupKey, missedN);
   const absTotal   = DB.auditAbsencesTotal(session, grouping, groupKey);
   const absConsec  = DB.auditAbsencesConsecutive(session, grouping, groupKey);
   const excused    = DB.auditExcusedTotal(session, grouping, groupKey);
@@ -8154,6 +8205,17 @@ function renderAuditPanels() {
         onclick: f.teacher ? `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')` : `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${escHtml(new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} — ${escHtml(f.teacher || 'no teacher')}`,
       }))}
+      ${_auditPanelHtml(
+        `📋 Missed classes <select class="form-select" onchange="onAuditMissedNChange(this.value)" style="display:inline-block; width:auto; padding:2px 24px 2px 8px; font-size:12px; margin-left:6px;">${[2, 3, 4].map(n => `<option value="${n}" ${n === missedN ? 'selected' : ''}>${n} or more</option>`).join('')}</select>`,
+        missed, f => {
+          const fmt = d => escHtml(new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+          const split = [f.absentCount ? `${f.absentCount} absent` : '', f.excusedCount ? `${f.excusedCount} excused` : ''].filter(Boolean).join(', ');
+          return {
+            onclick: `openStudentModal('${f.id}')`,
+            label: `${escHtml(f.studentName)} — ${f.missedCount} missed (${split})${f.longestRun >= 2 ? ` · ${f.longestRun} in a row` : ''}` +
+                   `<div style="font-size:11px; color:var(--ink-light); margin-top:2px;">${f.dates.map(x => fmt(x.date) + (x.excused ? ' (excused)' : '')).join(', ')}</div>`,
+          };
+        })}
       ${_auditPanelHtml('📉 Student absent 3+ times', absTotal, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.absentCount} absences`,
@@ -8166,7 +8228,7 @@ function renderAuditPanels() {
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.excusedCount} excused (${f.dates.map(d => escHtml(new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))).join(', ')})`,
       }))}
-      ${_auditPanelHtml('📚 Missing homework (2+ weeks)', missingHw, f => ({
+      ${_auditPanelHtml('📚 Homework not posted by teacher (2+ weeks)', missingHw, f => ({
         onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
         label: `${escHtml(f.classLabel)} — ${f.lastHomeworkDate ? `last: ${escHtml(f.lastHomeworkDate)}` : 'never'}`,
       }))}
