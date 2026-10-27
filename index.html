@@ -1314,6 +1314,30 @@ const DB = {
       .sort((a, b) => b.consecutiveCount - a.consecutiveCount);
   },
 
+  // Audit check: students with >= threshold EXCUSED absences (attendance mark
+  // 'vacation', shown as "Excused" in the UI) in this session. Excused absences
+  // disrupt learning too, so they are tracked separately from the unexcused
+  // 'absent' checks above. Only class dates up to and including today are
+  // counted, so an absence a teacher pre-marked for a future class (advance
+  // notice) is not counted as missed yet. grouping/groupKey optionally scope to
+  // one class/teacher, same convention as the other audit checks. threshold
+  // defaults to 2 (hardcoded for now, like the other thresholds).
+  // Returns [{ id, studentId, studentName, excusedCount, dates }], most excused
+  // first; dates are ISO strings, oldest first.
+  auditExcusedTotal(sessionName, grouping, groupKey, threshold = 2) {
+    const today = _todayLocal();
+    return _matchingStudents(sessionName, grouping, groupKey)
+      .map(({ student, sd }) => {
+        const dates = Object.entries(sd.attendance || {})
+          .filter(([date, v]) => v === 'vacation' && date <= today)
+          .map(([date]) => date)
+          .sort();
+        return { id: student.id, studentId: student.studentId, studentName: `${student.firstName} ${student.lastName}`, excusedCount: dates.length, dates };
+      })
+      .filter(r => r.excusedCount >= threshold)
+      .sort((a, b) => b.excusedCount - a.excusedCount || a.studentName.localeCompare(b.studentName));
+  },
+
   // Audit check: classes whose most recent homework broadcast (see
   // saveHomeworkNoteToClass) is more than weeksThreshold weeks old, or that
   // have never had one. Homework broadcasts are written into every
@@ -1574,7 +1598,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.3';
+const APP_VERSION = 'v2026-10-27.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -8118,6 +8142,7 @@ function renderAuditPanels() {
   const unmarked   = DB.auditAttendanceUnmarked(session, grouping, groupKey);
   const absTotal   = DB.auditAbsencesTotal(session, grouping, groupKey);
   const absConsec  = DB.auditAbsencesConsecutive(session, grouping, groupKey);
+  const excused    = DB.auditExcusedTotal(session, grouping, groupKey);
   const missingHw  = DB.auditMissingHomework(session, grouping, groupKey);
   const staleNotes = DB.auditStaleNotes(session, grouping, groupKey);
 
@@ -8136,6 +8161,10 @@ function renderAuditPanels() {
       ${_auditPanelHtml('⏭️ Student absent 2+ in a row', absConsec, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.consecutiveCount} in a row`,
+      }))}
+      ${_auditPanelHtml('🗓️ Student excused 2+ times', excused, f => ({
+        onclick: `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — ${f.excusedCount} excused (${f.dates.map(d => escHtml(new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))).join(', ')})`,
       }))}
       ${_auditPanelHtml('📚 Missing homework (2+ weeks)', missingHw, f => ({
         onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
