@@ -1232,38 +1232,6 @@ const DB = {
     return { dates, counts, enrolledTotal: matchingSd.length };
   },
 
-  // Audit check: classes with a past class date where NOT A SINGLE enrolled
-  // student has any attendance mark at all (a fully-skipped roll call, not
-  // just one student's attendance missing — that's not flagged here).
-  // grouping/groupKey optionally scope which classes are checked, same
-  // 'teacher' | 'class' | null convention as healthTrend/healthGroups.
-  // Returns [{ classKey, classLabel, date }], one entry per unmarked
-  // (class, date) pair.
-  auditUnmarkedClasses(sessionName, grouping, groupKey) {
-    const sess = this.getSession(sessionName);
-    const today = _todayLocal();
-    const pastDates = (sess?.classDates || []).filter(d => d <= today);
-    if (!pastDates.length) return [];
-
-    let classGroups = this.healthGroups(sessionName, 'class');
-    if (grouping === 'class') {
-      classGroups = classGroups.filter(g => g.key === groupKey);
-    } else if (grouping === 'teacher') {
-      classGroups = classGroups.filter(g => g.key.split('|')[0] === groupKey);
-    }
-
-    const flags = [];
-    classGroups.forEach(({ key, label }) => {
-      const sds = _matchingStudents(sessionName, 'class', key).map(({ sd }) => sd);
-      if (!sds.length) return;
-      pastDates.forEach(date => {
-        const anyMarked = sds.some(sd => !!(sd.attendance || {})[date]);
-        if (!anyMarked) flags.push({ classKey: key, classLabel: label, date });
-      });
-    });
-    return flags;
-  },
-
   // Audit check: students with >= threshold total 'absent' marks in this
   // session (not necessarily consecutive — see auditAbsencesConsecutive for
   // that). grouping/groupKey optionally scope to one class/teacher, same
@@ -1311,44 +1279,6 @@ const DB = {
       })
       .filter(r => r.consecutiveCount >= threshold)
       .sort((a, b) => b.consecutiveCount - a.consecutiveCount);
-  },
-
-  // Audit check: classes where turnout (present / enrolled) on the most
-  // recent past class date fell below threshold (default 50%). classDates
-  // are shared across all classes in a session, so "most recent past date"
-  // is the same single date for every class — this is a point-in-time
-  // signal (last class only), not a rolling average. A class with no
-  // enrolled students, or no past class date yet, is skipped (nothing
-  // meaningful to compute). grouping/groupKey optionally scope which
-  // classes are checked, same convention as the other audit checks.
-  // Returns [{ classKey, classLabel, date, presentCount, enrolledCount,
-  // turnoutFraction }], sorted by turnoutFraction ascending (worst first).
-  auditLowTurnout(sessionName, grouping, groupKey, threshold = 0.5) {
-    const sess = this.getSession(sessionName);
-    const today = _todayLocal();
-    const pastDates = (sess?.classDates || []).filter(d => d <= today);
-    if (!pastDates.length) return [];
-    const lastDate = pastDates[pastDates.length - 1];
-
-    let classGroups = this.healthGroups(sessionName, 'class');
-    if (grouping === 'class') {
-      classGroups = classGroups.filter(g => g.key === groupKey);
-    } else if (grouping === 'teacher') {
-      classGroups = classGroups.filter(g => g.key.split('|')[0] === groupKey);
-    }
-
-    const flags = [];
-    classGroups.forEach(({ key, label }) => {
-      const sds = _matchingStudents(sessionName, 'class', key).map(({ sd }) => sd);
-      const enrolledCount = sds.length;
-      if (!enrolledCount) return;
-      const presentCount = sds.filter(sd => (sd.attendance || {})[lastDate] === 'present').length;
-      const turnoutFraction = presentCount / enrolledCount;
-      if (turnoutFraction < threshold) {
-        flags.push({ classKey: key, classLabel: label, date: lastDate, presentCount, enrolledCount, turnoutFraction });
-      }
-    });
-    return flags.sort((a, b) => a.turnoutFraction - b.turnoutFraction);
   },
 
   // Audit check: classes whose most recent homework broadcast (see
@@ -1611,7 +1541,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-13.3';
+const APP_VERSION = 'v2026-10-27.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -8141,19 +8071,13 @@ function onAuditFilterChange() {
 function renderAuditPanels() {
   const { session, grouping, groupKey } = _auditState;
 
-  const unmarked   = DB.auditUnmarkedClasses(session, grouping, groupKey);
   const absTotal   = DB.auditAbsencesTotal(session, grouping, groupKey);
   const absConsec  = DB.auditAbsencesConsecutive(session, grouping, groupKey);
-  const lowTurnout = DB.auditLowTurnout(session, grouping, groupKey);
   const missingHw  = DB.auditMissingHomework(session, grouping, groupKey);
   const staleNotes = DB.auditStaleNotes(session, grouping, groupKey);
 
   document.getElementById('audit-panels').innerHTML = `
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
-      ${_auditPanelHtml('🚫 Class attendance unmarked', unmarked, f => ({
-        onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
-        label: `${escHtml(f.classLabel)} — ${escHtml(f.date)}`,
-      }))}
       ${_auditPanelHtml('📉 Student absent 3+ times', absTotal, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.absentCount} absences`,
@@ -8161,10 +8085,6 @@ function renderAuditPanels() {
       ${_auditPanelHtml('⏭️ Student absent 2+ in a row', absConsec, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.consecutiveCount} in a row`,
-      }))}
-      ${_auditPanelHtml('📊 Low turnout (last class < 50%)', lowTurnout, f => ({
-        onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
-        label: `${escHtml(f.classLabel)} — ${f.presentCount}/${f.enrolledCount} on ${escHtml(f.date)}`,
       }))}
       ${_auditPanelHtml('📚 Missing homework (2+ weeks)', missingHw, f => ({
         onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
