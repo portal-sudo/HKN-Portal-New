@@ -1232,6 +1232,39 @@ const DB = {
     return { dates, counts, enrolledTotal: matchingSd.length };
   },
 
+  // Audit check: Active students with no attendance mark (blank or 'unmarked')
+  // on a class date that has already passed. TODAY's class day is excluded so a
+  // teacher isn't flagged before they have had the chance to mark; it shows up
+  // from the next day. grouping/groupKey optionally scope to one class/teacher,
+  // same convention as the other audit checks. A late-joining student will show
+  // dates before they enrolled (there is no "not enrolled yet" mark to give).
+  // Returns [{ id, studentId, studentName, teacher, classKey, date }], oldest
+  // date first, then teacher, then student name.
+  auditAttendanceUnmarked(sessionName, grouping, groupKey) {
+    const sess = this.getSession(sessionName);
+    const today = _todayLocal();
+    const pastDates = (sess?.classDates || []).filter(d => d < today);
+    if (!pastDates.length) return [];
+    const rows = [];
+    _matchingStudents(sessionName, grouping, groupKey).forEach(({ student, sd }) => {
+      const att = sd.attendance || {};
+      pastDates.forEach(date => {
+        const v = att[date];
+        if (!v || v === 'unmarked') {
+          rows.push({
+            id: student.id, studentId: student.studentId,
+            studentName: `${student.firstName} ${student.lastName}`,
+            teacher: sd.teacher || '', classKey: _healthClassKey(sd), date,
+          });
+        }
+      });
+    });
+    return rows.sort((a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.teacher.localeCompare(b.teacher) ||
+      a.studentName.localeCompare(b.studentName));
+  },
+
   // Audit check: students with >= threshold total 'absent' marks in this
   // session (not necessarily consecutive — see auditAbsencesConsecutive for
   // that). grouping/groupKey optionally scope to one class/teacher, same
@@ -1541,7 +1574,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.1';
+const APP_VERSION = 'v2026-10-27.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7990,16 +8023,28 @@ function saveHealthNote() {
 // metric/series pair.
 let _auditState = { session: '', grouping: '', groupKey: '' };
 
+// Default filter for the current _auditState.session: a teacher starts on their
+// own classes, everyone else (admin/viewer) on the whole school. If the teacher
+// has no classes in this session there is nothing to filter to, so fall back to
+// the whole school instead of showing a misleading all-clear.
+function _auditApplyDefaultFilter() {
+  _auditState.grouping = '';
+  _auditState.groupKey = '';
+  if (currentUser.role === 'teacher' && currentUser.name) {
+    const me = currentUser.name.toLowerCase();
+    const mine = DB.healthGroups(_auditState.session, 'teacher').find(g => g.key.toLowerCase() === me);
+    if (mine) {
+      _auditState.grouping = 'teacher';
+      _auditState.groupKey = mine.key;
+    }
+  }
+}
+
 function renderAuditLogs() {
   const sessions = sortSessionsChronological(DB.getSessions());
   const activeSess = SessionEngine.getActiveSession() || sessions[sessions.length - 1];
   _auditState.session = activeSess?.name || '';
-  _auditState.grouping = '';
-  _auditState.groupKey = '';
-  if (currentUser.role === 'teacher' && currentUser.name) {
-    _auditState.grouping = 'teacher';
-    _auditState.groupKey = currentUser.name;
-  }
+  _auditApplyDefaultFilter();
 
   document.getElementById('content-area').innerHTML = `
     <div class="page-header">
@@ -8047,8 +8092,7 @@ function _populateAuditFilterOptions() {
 
 function onAuditSessionChange() {
   _auditState.session = document.getElementById('audit-session').value;
-  _auditState.grouping = '';
-  _auditState.groupKey = '';
+  _auditApplyDefaultFilter();
   _populateAuditFilterOptions();
   renderAuditPanels();
 }
@@ -8071,6 +8115,7 @@ function onAuditFilterChange() {
 function renderAuditPanels() {
   const { session, grouping, groupKey } = _auditState;
 
+  const unmarked   = DB.auditAttendanceUnmarked(session, grouping, groupKey);
   const absTotal   = DB.auditAbsencesTotal(session, grouping, groupKey);
   const absConsec  = DB.auditAbsencesConsecutive(session, grouping, groupKey);
   const missingHw  = DB.auditMissingHomework(session, grouping, groupKey);
@@ -8078,6 +8123,12 @@ function renderAuditPanels() {
 
   document.getElementById('audit-panels').innerHTML = `
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+      ${_auditPanelHtml('🚫 Attendance not marked', unmarked, f => ({
+        // Take the teacher to the class to fix it; a student with no teacher
+        // assigned has no class to open, so open the student record instead.
+        onclick: f.teacher ? `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')` : `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — ${escHtml(new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} — ${escHtml(f.teacher || 'no teacher')}`,
+      }))}
       ${_auditPanelHtml('📉 Student absent 3+ times', absTotal, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — ${f.absentCount} absences`,
