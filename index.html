@@ -1578,7 +1578,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.9';
+const APP_VERSION = 'v2026-10-27.10';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -8195,13 +8195,8 @@ function renderAuditPanels() {
   const staleNotes = DB.auditStaleNotes(session, grouping, groupKey);
 
   document.getElementById('audit-panels').innerHTML = `
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
-      ${_auditPanelHtml('🚫 Attendance not marked', unmarked, f => ({
-        // Take the teacher to the class to fix it; a student with no teacher
-        // assigned has no class to open, so open the student record instead.
-        onclick: f.teacher ? `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')` : `openStudentModal('${f.id}')`,
-        label: `${escHtml(f.studentName)} — ${escHtml(new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} — ${escHtml(f.teacher || 'no teacher')}`,
-      }))}
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:16px; align-items:start;">
+      <div>
       ${_auditPanelHtml(
         `📋 Missed classes <select class="form-select" onchange="onAuditMissedNChange(this.value)" style="display:inline-block; width:auto; padding:2px 24px 2px 8px; font-size:12px; margin-left:6px;">${[2, 3, 4].map(n => `<option value="${n}" ${n === missedN ? 'selected' : ''}>${n} or more</option>`).join('')}</select>${missed.length ? ` <button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="emailMissedFromAudit()">✉ Email these parents (${missed.length})</button>` : ''}`,
         missed, f => {
@@ -8212,26 +8207,35 @@ function renderAuditPanels() {
             label: `${escHtml(f.studentName)} — ${f.missedCount} missed (${split})${f.longestRun >= 2 ? ` · ${f.longestRun} in a row` : ''}` +
                    `<div style="font-size:11px; color:var(--ink-light); margin-top:2px;">${f.dates.map(x => fmt(x.date) + (x.excused ? ' (excused)' : '')).join(', ')}</div>`,
           };
-        })}
+        }, '72vh')}
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px;">
+      ${_auditPanelHtml('🚫 Attendance not marked', unmarked, f => ({
+        // Take the teacher to the class to fix it; a student with no teacher
+        // assigned has no class to open, so open the student record instead.
+        onclick: f.teacher ? `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')` : `openStudentModal('${f.id}')`,
+        label: `${escHtml(f.studentName)} — ${escHtml(new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} — ${escHtml(f.teacher || 'no teacher')}`,
+      }), '220px')}
       ${_auditPanelHtml('📚 Homework not posted by teacher (2+ weeks)', missingHw, f => ({
         onclick: `goToClassFromAudit('${f.classKey.replace(/'/g, "\\'")}')`,
         label: `${escHtml(f.classLabel)} — ${f.lastHomeworkDate ? `last: ${escHtml(f.lastHomeworkDate)}` : 'never'}`,
-      }))}
+      }), '220px')}
       ${_auditPanelHtml('📝 Personal Note (3+ weeks old)', staleNotes, f => ({
         onclick: `openStudentModal('${f.id}')`,
         label: `${escHtml(f.studentName)} — last noted ${escHtml(f.lastNoteDate)}`,
-      }))}
+      }), '220px')}
+      </div>
     </div>
   `;
 }
 
 // rowFn(item) returns { onclick, label } — label is already-escaped display
 // text, onclick is a plain JS call expression (no surrounding quotes).
-function _auditPanelHtml(title, items, rowFn) {
+function _auditPanelHtml(title, items, rowFn, maxHeight) {
   return `
     <div class="card">
       <div class="card-title">${title}</div>
-      <div style="margin-top:8px;">
+      <div style="margin-top:8px;${maxHeight ? ` max-height:${maxHeight}; overflow-y:auto;` : ''}">
         ${items.length ? items.map(f => {
           const { onclick, label } = rowFn(f);
           return `
