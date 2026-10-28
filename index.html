@@ -851,6 +851,29 @@ function _healthClassKey(sd) {
   return `${sd.teacher || ''}|${sd.classTime || ''}`;
 }
 
+// Missed classes (unexcused 'absent' or excused 'vacation') for one student's
+// attendance map, across classDates (already limited to dates up to today and
+// sorted oldest first). Shared by the Audit "Missed classes" panel and the
+// {{absenceCount}} / {{absenceDates}} email merge fields so the two can never
+// disagree. A present or blank mark breaks a run of back-to-back missed classes.
+// Returns { dates: [{ date, excused }], longestRun }.
+function _missedClassDatesFor(attendance, classDates) {
+  const att = attendance || {};
+  const dates = [];
+  let run = 0, longestRun = 0;
+  classDates.forEach(date => {
+    const v = att[date];
+    if (v === 'absent' || v === 'vacation') {
+      dates.push({ date, excused: v === 'vacation' });
+      run++;
+      if (run > longestRun) longestRun = run;
+    } else {
+      run = 0;
+    }
+  });
+  return { dates, longestRun };
+}
+
 // Active students with a sessionData entry for the given session, optionally
 // scoped by grouping/groupKey (same semantics as DB.healthGroups/healthTrend:
 // grouping is 'school' | 'teacher' | 'class'). Returns [{ student, sd }] —
@@ -1282,19 +1305,7 @@ const DB = {
     if (!classDates.length) return [];
     return _matchingStudents(sessionName, grouping, groupKey)
       .map(({ student, sd }) => {
-        const att = sd.attendance || {};
-        const dates = [];
-        let run = 0, longestRun = 0;
-        classDates.forEach(date => {
-          const v = att[date];
-          if (v === 'absent' || v === 'vacation') {
-            dates.push({ date, excused: v === 'vacation' });
-            run++;
-            if (run > longestRun) longestRun = run;
-          } else {
-            run = 0;
-          }
-        });
+        const { dates, longestRun } = _missedClassDatesFor(sd.attendance, classDates);
         const excusedCount = dates.filter(x => x.excused).length;
         return {
           id: student.id, studentId: student.studentId,
@@ -1567,7 +1578,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.7';
+const APP_VERSION = 'v2026-10-27.9';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1579,6 +1590,8 @@ let currentSort = { col: 'name', dir: 'asc' }; // directory sort state
 let _emailPreselectIds = []; // student IDs pre-selected from fees tracker (or other sources)
 let _emailPreselectLabel = ''; // describes why, shown in the Send Email banner
 let _emailPreselectTemplate = null; // { subject, body } to auto-fill, one-time use
+let _emailArrivedFromAudit = false; // one-shot: renderEmail keeps _emailAbsenceSession only when true
+let _emailAbsenceSession = ''; // session the {{absenceCount}}/{{absenceDates}} merge fields read; '' = same session as the other merge fields
 
 // Replaces all window._* globals with a single managed state object
 const AppState = {
@@ -6810,7 +6823,11 @@ function renderEmail() {
   const isAdmin     = currentUser.role === 'admin';
   const isTeacher   = currentUser.role === 'teacher';
   const activeSessName = (SessionEngine.getActiveSession() || sessions.slice(-1)[0])?.name || '';
+  // Absence merge fields exist only when arriving from the Audit page.
+  if (!_emailArrivedFromAudit) _emailAbsenceSession = '';
+  _emailArrivedFromAudit = false;
   const placeholders = ['{{studentFirstName}}','{{studentLastName}}','{{parentFirstName}}','{{sessionName}}','{{studentId}}','{{classTime}}','{{classLevel}}','{{bookNumber}}','{{teacher}}'];
+  const absencePlaceholders = _emailAbsenceSession ? ['{{absenceCount}}','{{absenceDates}}'] : [];
   const settings    = DB.getSettings();
   const templates   = DB.getTemplates().slice().sort((a, b) => naturalCompare(a.name || '', b.name || ''));
 
@@ -6827,12 +6844,12 @@ function renderEmail() {
       <div class="card">
         <div class="card-title">Recipients</div>
         <div class="filter-bar" style="margin-bottom:12px;">
-          <select class="form-select" id="email-filter-status" onchange="_emailPreselectIds=[];loadEmailRecipients()"
+          <select class="form-select" id="email-filter-status" onchange="_emailPreselectIds=[];_emailAbsenceSession='';loadEmailRecipients()"
             style="appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath d=%22M2.5 4.5L6 8L9.5 4.5%22 stroke=%22%235A5A40%22 stroke-width=%221.8%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E'); background-repeat:no-repeat; background-position:right 10px center; padding-right:28px;">
             <option value="">All statuses</option>
             ${STUDENT_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
           </select>
-          ${_renderMultiSelectFilter('session', 'All sessions', sessions.map(s => s.name), [activeSessName])}
+          ${_renderMultiSelectFilter('session', 'All sessions', sessions.map(s => s.name), [_emailAbsenceSession || activeSessName])}
           ${_renderMultiSelectFilter('level', 'All levels', DB.getClassLevels(), [])}
           ${_renderMultiSelectFilter('teacher', 'All teachers', isAdmin ? DB.teacherNames() : [currentUser.name], [])}
           <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-mid); cursor:pointer; white-space:nowrap;">
@@ -6888,7 +6905,7 @@ function renderEmail() {
         ` : ''}
         <div style="margin-bottom:12px;">
           <div style="font-size:11px; font-weight:700; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">MailMerge — click to insert</div>
-          <div>${placeholders.map(p => `<span class="placeholder-chip" onclick="insertPlaceholder('${p}')">${p}</span>`).join('')}</div>
+          <div>${placeholders.concat(absencePlaceholders).map(p => `<span class="placeholder-chip" onclick="insertPlaceholder('${p}')">${p}</span>`).join('')}</div>
         </div>
         <div class="form-group" style="margin-bottom:12px;">
           <label class="form-label">Subject</label>
@@ -6952,7 +6969,7 @@ function renderEmail() {
     banner.id = 'fee-reminder-banner';
     banner.style.cssText = 'background:var(--orange-light);border:1px solid rgba(242,125,38,0.3);border-radius:var(--radius-md);padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--orange-dark);';
     banner.innerHTML = `<span>📌 Pre-selected <strong>${_emailPreselectIds.length} student${_emailPreselectIds.length !== 1 ? 's' : ''}</strong>${_emailPreselectLabel ? ' ' + escHtml(_emailPreselectLabel) : ''}</span>
-      <button class="btn btn-ghost btn-sm" onclick="_emailPreselectIds=[];_emailPreselectLabel='';renderEmail();" style="color:var(--orange-dark);font-size:11px;">✕ Clear</button>`;
+      <button class="btn btn-ghost btn-sm" onclick="_emailPreselectIds=[];_emailPreselectLabel='';_emailAbsenceSession='';renderEmail();" style="color:var(--orange-dark);font-size:11px;">✕ Clear</button>`;
     const contentArea = document.getElementById('content-area');
     contentArea.insertBefore(banner, contentArea.firstChild);
   }
@@ -7341,11 +7358,29 @@ function resolvePlaceholders(text, student) {
                 || {};
   const sessName = sessData.session || activeSess?.name || '';
   const sess = DB.getSession(sessName) || {};
+
+  // Absence fields: only worked out when the text actually uses them. Counts
+  // unexcused plus excused absences on class dates up to today, e.g.
+  // "Sep 12 (excused), Oct 10 and Oct 17".
+  let absenceCount = '', absenceDates = '';
+  if (text.includes('{{absenceCount}}') || text.includes('{{absenceDates}}')) {
+    const absSessName = _emailAbsenceSession || sessName;
+    const absClassDates = ((DB.getSession(absSessName) || {}).classDates || []).filter(d => d <= _todayLocal()).sort();
+    const absSd = (student.sessionData || []).find(d => d.session === absSessName) || {};
+    const missed = _missedClassDatesFor(absSd.attendance, absClassDates).dates;
+    const parts = missed.map(x =>
+      new Date(x.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + (x.excused ? ' (excused)' : ''));
+    absenceCount = String(missed.length);
+    absenceDates = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : (parts[0] || '');
+  }
+
   return text
+    .replace(/{{absenceCount}}/g,     absenceCount)
+    .replace(/{{absenceDates}}/g,     absenceDates)
     .replace(/{{studentFirstName}}/g, student.firstName || '')
     .replace(/{{studentLastName}}/g,  student.lastName  || '')
     .replace(/{{parentFirstName}}/g,  student.parentFirstName || '')
-    .replace(/{{sessionName}}/g,      sessName)
+    .replace(/{{sessionName}}/g,      _emailAbsenceSession || sessName)
     .replace(/{{fees}}/g,             `$${sess.fees || ''}`)
     .replace(/{{studentId}}/g,        student.studentId || 'Pending')
     .replace(/{{classTime}}/g,        sessData.classTime || '')
@@ -8091,6 +8126,44 @@ function onAuditSessionChange() {
   renderAuditPanels();
 }
 
+// Hands the students in the "Missed classes" panel to Send Email with the
+// absence template filled in. Wording depends on whether the audited session
+// has finished (end-of-session note + next session) or is still running.
+function emailMissedFromAudit() {
+  const { session, grouping, groupKey } = _auditState;
+  const n = _auditState.missedN || 2;
+  const rows = DB.auditMissedClasses(session, grouping, groupKey, n);
+  if (!rows.length) { showToast('No students to email', 'warning'); return; }
+  const fmtLong = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const dates = ((DB.getSession(session) || {}).classDates || []).slice().sort();
+  const lastDate = dates[dates.length - 1] || '';
+  const ended = !!lastDate && _todayLocal() > lastDate;
+  let next = null;
+  DB.getSessions().forEach(x => {
+    const first = ((x.classDates || []).slice().sort())[0];
+    if (first && lastDate && first > lastDate && (!next || first < next.first)) next = { name: x.name, first };
+  });
+  const intro = ended
+    ? "As {{sessionName}} has come to a close, we wanted to share a quick note about {{studentFirstName}}'s attendance."
+    : "We wanted to share a quick note about {{studentFirstName}}'s attendance so far in {{sessionName}}.";
+  const outro = (ended && next)
+    ? `As we head into ${next.name}, which begins on ${fmtLong(next.first)}, we hope to see {{studentFirstName}} in class every week.`
+    : "We hope to see {{studentFirstName}} in class every week.";
+  _emailPreselectIds = rows.map(r => r.id);
+  _emailPreselectLabel = `who missed ${n} or more classes in ${session}`;
+  _emailPreselectTemplate = {
+    subject: "{{studentFirstName}}'s attendance in {{sessionName}}",
+    body: "Dear {{parentFirstName}},<br><br>" + intro +
+      " {{studentFirstName}} missed {{absenceCount}} classes this session, on {{absenceDates}}.<br><br>" +
+      "We know that life gets busy, and we are glad to have {{studentFirstName}} in our Hindi class. Regular attendance makes a big difference for children learning a language, because each class builds on the one before it. " + outro + "<br><br>" +
+      "If something is making it hard to attend, or if you think we have an absence recorded in error, please let us know at portal@hindikineev.org and we will be happy to help.<br><br>" +
+      "Thank you for being part of {{studentFirstName}}'s Hindi learning journey!<br><br>Warm regards,<br>The HKN Team",
+  };
+  _emailAbsenceSession = session;
+  _emailArrivedFromAudit = true;
+  navigateTo('email');
+}
+
 function onAuditMissedNChange(val) {
   const n = parseInt(val, 10);
   _auditState.missedN = n >= 1 ? n : 2;
@@ -8130,7 +8203,7 @@ function renderAuditPanels() {
         label: `${escHtml(f.studentName)} — ${escHtml(new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} — ${escHtml(f.teacher || 'no teacher')}`,
       }))}
       ${_auditPanelHtml(
-        `📋 Missed classes <select class="form-select" onchange="onAuditMissedNChange(this.value)" style="display:inline-block; width:auto; padding:2px 24px 2px 8px; font-size:12px; margin-left:6px;">${[2, 3, 4].map(n => `<option value="${n}" ${n === missedN ? 'selected' : ''}>${n} or more</option>`).join('')}</select>`,
+        `📋 Missed classes <select class="form-select" onchange="onAuditMissedNChange(this.value)" style="display:inline-block; width:auto; padding:2px 24px 2px 8px; font-size:12px; margin-left:6px;">${[2, 3, 4].map(n => `<option value="${n}" ${n === missedN ? 'selected' : ''}>${n} or more</option>`).join('')}</select>${missed.length ? ` <button class="btn btn-secondary btn-sm" style="margin-left:6px;" onclick="emailMissedFromAudit()">✉ Email these parents (${missed.length})</button>` : ''}`,
         missed, f => {
           const fmt = d => escHtml(new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
           const split = [f.absentCount ? `${f.absentCount} absent` : '', f.excusedCount ? `${f.excusedCount} excused` : ''].filter(Boolean).join(', ');
