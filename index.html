@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-09.3';
+const APP_VERSION = 'v2026-11-09.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7619,6 +7619,15 @@ function _templateCategoryOptions(selected) {
     .map(c => `<option value="${escAttr(c)}" ${c === selected ? 'selected' : ''}>${escHtml(c)}</option>`).join('');
 }
 
+// Which template-category sections are open on the Templates page. Kept while the
+// app is open so the page comes back the way you left it after an edit or a visit
+// to another page. Categories start collapsed.
+let _tmplOpenCats = new Set();
+function _tmplToggle(el) {
+  const name = el.dataset.cat;
+  if (el.open) _tmplOpenCats.add(name); else _tmplOpenCats.delete(name);
+}
+
 function renderTemplates() {
   const templates = DB.getTemplates();
   const isAdmin = currentUser.role === 'admin';
@@ -7645,7 +7654,7 @@ function renderTemplates() {
   const sections = DB.groupedTemplates()
     .filter(g => g.templates.length || isAdmin)
     .map(g => `
-      <details class="card" style="padding:0; margin-bottom:14px;">
+      <details class="card" style="padding:0; margin-bottom:14px;" data-cat="${escAttr(g.name)}" ${_tmplOpenCats.has(g.name) ? 'open' : ''} ontoggle="_tmplToggle(this)">
         <summary style="padding:12px 16px; cursor:pointer; font-weight:600; font-size:14px; color:var(--olive);">
           ${escHtml(g.name)} <span style="font-weight:400; font-size:12px; color:var(--ink-light);">(${g.templates.length})</span>
         </summary>
@@ -7745,6 +7754,7 @@ function tcRename(i, raw) {
   const old = cats[i];
   const name = _tcCheckName(raw, i);
   if (name && name !== old) {
+    if (_tmplOpenCats.delete(old)) _tmplOpenCats.add(name);
     DB.renameTemplateCategory(old, name);
     showToast(`Renamed to "${name}"`, 'success');
   }
@@ -7772,6 +7782,7 @@ function tcDelete(i) {
     'Delete', 'btn-danger',
     () => {
       document.getElementById('confirm-overlay')?.remove();
+      _tmplOpenCats.delete(name);
       DB.deleteTemplateCategory(name);
       openManageTemplateCategories();
       renderTemplates();
