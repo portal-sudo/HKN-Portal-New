@@ -672,9 +672,16 @@ const _cache = {
   classNames:  [],
   settings:    {},
   templates:   [],
+  templateCategories: [],
 };
 
 const STUDENT_STATUSES = ['Interest','Invited','In-Process','Active','Alumni','Graduated','Dropped'];
+
+// Email-template categories. The named list is editable (stored in lookup_config,
+// type 'templateCategory'); 'Other' is built in and always last. A template whose
+// category is blank or no longer in the list shows under Other.
+const TEMPLATE_CATEGORY_OTHER = 'Other';
+const DEFAULT_TEMPLATE_CATEGORIES = ['Interest & Invitations', 'Enrollment & Payment', 'Start of Term', 'During & End of Term'];
 
 // Pre-composed message used by the "Email these parents" button on the
 // Dashboard's Parent Check-In chart — auto-fills Subject/Body when
@@ -1129,6 +1136,42 @@ const DB = {
   // EMAIL TEMPLATES
   getTemplates()     { return _cache.templates.slice().sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0)); },
   getTemplate(id)    { return _cache.templates.find(t => t.id === id); },
+
+  // TEMPLATE CATEGORIES
+  getTemplateCategories() { return _cache.templateCategories.slice(); },
+  saveTemplateCategories(arr) {
+    _cache.templateCategories = arr;
+    SupabaseSync.upsertLookupConfig();
+  },
+  templateCategoryOf(t) {
+    const c = (t && t.category) || '';
+    return _cache.templateCategories.includes(c) ? c : TEMPLATE_CATEGORY_OTHER;
+  },
+  // [{ name, templates }] — named categories in order, then Other last. Templates
+  // inside each group are sorted by name (numbers in names sort naturally).
+  groupedTemplates() {
+    const sorted = _cache.templates.slice().sort((a, b) => naturalCompare(a.name || '', b.name || ''));
+    const groups = _cache.templateCategories.map(name => ({ name, templates: [] }));
+    const other = { name: TEMPLATE_CATEGORY_OTHER, templates: [] };
+    sorted.forEach(t => {
+      const g = groups.find(x => x.name === this.templateCategoryOf(t));
+      (g || other).templates.push(t);
+    });
+    groups.push(other);
+    return groups;
+  },
+  renameTemplateCategory(oldName, newName) {
+    _cache.templateCategories = _cache.templateCategories.map(c => c === oldName ? newName : c);
+    _cache.templates.forEach(t => { if (t.category === oldName) t.category = newName; });
+    SupabaseSync.upsertLookupConfig();
+    SupabaseSync.upsertTemplates(_cache.templates);
+  },
+  deleteTemplateCategory(name) {
+    _cache.templateCategories = _cache.templateCategories.filter(c => c !== name);
+    _cache.templates.forEach(t => { if (t.category === name) t.category = TEMPLATE_CATEGORY_OTHER; });
+    SupabaseSync.upsertLookupConfig();
+    SupabaseSync.upsertTemplates(_cache.templates);
+  },
   saveTemplates(arr) {
     _cache.templates = arr;
     SupabaseSync.upsertTemplates(arr);
@@ -1406,6 +1449,7 @@ const DB = {
       classNames:  _cache.classNames,
       settings:    _cache.settings,
       templates:   _cache.templates,
+      templateCategories: _cache.templateCategories,
     }, null, 2);
   },
 
@@ -1422,6 +1466,7 @@ const DB = {
       classNames:  _cache.classNames,
       settings:    _cache.settings,
       templates:   _cache.templates,
+      templateCategories: _cache.templateCategories,
     };
   },
 
@@ -1439,6 +1484,7 @@ const DB = {
     if (d.classNames)   _cache.classNames  = d.classNames;
     if (d.settings)     _cache.settings    = { ..._cache.settings, ...d.settings };
     if (d.templates)    _cache.templates   = d.templates;
+    if (d.templateCategories && d.templateCategories.length) _cache.templateCategories = d.templateCategories;
     // Full Supabase snapshot restore — delete-then-insert, restore-only path
     SupabaseSync.restoreAll();
   },
@@ -1578,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-10-27.11';
+const APP_VERSION = 'v2026-11-09.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -6444,6 +6490,7 @@ const SupabaseSync = {
       const bookLevels  = byType('bookLevel');
       const classTimes  = byType('classTime');
       const classNames  = byType('className');
+      const templateCategories = byType('templateCategory');
 
       const levelBookMap = {};
       (lookupRows || [])
@@ -6472,6 +6519,7 @@ const SupabaseSync = {
         createdBy: row.created_by,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        category:  row.category || null,
       }));
 
       // ── Populate in-memory cache directly ──
@@ -6485,6 +6533,7 @@ const SupabaseSync = {
       _cache.classNames  = classNames;
       _cache.settings    = settings;
       _cache.templates   = templates;
+      _cache.templateCategories = templateCategories.length ? templateCategories : DEFAULT_TEMPLATE_CATEGORIES.slice();
 
       console.log('SupabaseSync: loaded', students.length, 'students,', sessions.length, 'sessions');
       this.setStatus('synced');
@@ -6670,6 +6719,7 @@ const SupabaseSync = {
       created_by: t.createdBy ?? null,
       created_at: t.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      category:   t.category ?? null,
     }));
     const { error } = await _supabase.from('templates').upsert(rows, { onConflict: 'id' });
     if (error) console.warn('upsertTemplates:', error.message);
@@ -6689,6 +6739,7 @@ const SupabaseSync = {
       created_by: t.createdBy ?? null,
       created_at: t.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      category:   t.category ?? null,
     }));
     const { error } = await _supabase.from('templates').insert(rows);
     if (error) console.warn('restoreTemplates insert:', error.message);
@@ -6701,6 +6752,7 @@ const SupabaseSync = {
     _cache.bookLevels.forEach((v, i)  => rows.push({ type: 'bookLevel',  value: v, sort_order: i, book_level: null }));
     _cache.classTimes.forEach((v, i)  => rows.push({ type: 'classTime',  value: v, sort_order: i, book_level: null }));
     _cache.classNames.forEach((v, i)  => rows.push({ type: 'className',  value: v, sort_order: i, book_level: null }));
+    _cache.templateCategories.forEach((v, i) => rows.push({ type: 'templateCategory', value: v, sort_order: i, book_level: null }));
     if (rows.length) {
       const { error } = await _supabase.from('lookup_config').insert(rows);
       if (error) console.warn('upsertLookupConfig:', error.message);
@@ -6892,7 +6944,7 @@ function renderEmail() {
             <div style="display:flex; gap:8px;">
               <select class="form-select" id="template-selector" style="flex:1;">
                 <option value="">— choose a template —</option>
-                ${templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}
+                ${DB.groupedTemplates().filter(g => g.templates.length).map(g => `<optgroup label="${escAttr(g.name)}">${g.templates.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join('')}</optgroup>`).join('')}
               </select>
               <button class="btn btn-secondary btn-sm" onclick="loadTemplate()">Load</button>
             </div>
@@ -7385,6 +7437,10 @@ function openSaveTemplateDialog() {
           <label class="form-label">Template name</label>
           <input type="text" class="form-input" id="tmpl-name" placeholder="e.g. Session enrollment open, Fee reminder…" autofocus/>
         </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Category</label>
+          <select class="form-select" id="tmpl-category">${_templateCategoryOptions(TEMPLATE_CATEGORY_OTHER)}</select>
+        </div>
         <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:10px 14px; font-size:13px; color:var(--ink-mid);">
           <div style="font-weight:600; margin-bottom:4px;">Subject: ${escHtml(subject)}</div>
           <div style="font-size:12px; color:var(--ink-light); max-height:80px; overflow:hidden;">${body}</div>
@@ -7410,6 +7466,7 @@ function saveTemplate() {
     body:      body,
     createdAt: new Date().toISOString(),
     createdBy: currentUser.email,
+    category:  document.getElementById('tmpl-category')?.value || TEMPLATE_CATEGORY_OTHER,
   };
   DB.saveTemplate(tmpl);
   closeModal();
@@ -7556,11 +7613,17 @@ function copyCdTrackLink() {
   }
 }
 
+// <option> list for a template-category dropdown: named categories in order, Other last.
+function _templateCategoryOptions(selected) {
+  return DB.getTemplateCategories().concat([TEMPLATE_CATEGORY_OTHER])
+    .map(c => `<option value="${escAttr(c)}" ${c === selected ? 'selected' : ''}>${escHtml(c)}</option>`).join('');
+}
+
 function renderTemplates() {
-  const templates = DB.getTemplates().slice().sort((a, b) => naturalCompare(a.name || '', b.name || ''));
+  const templates = DB.getTemplates();
   const isAdmin = currentUser.role === 'admin';
 
-  const rows = templates.map(t => {
+  const rowHtml = t => {
     const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     return `<tr>
       <td style="font-weight:500; font-size:13px;">${escHtml(t.name)}</td>
@@ -7575,7 +7638,27 @@ function renderTemplates() {
         ` : ''}
       </td>
     </tr>`;
-  }).join('');
+  };
+
+  // One collapsible section per category. Empty named categories show for admins
+  // (so they know they exist); Other only shows when it has templates.
+  const sections = DB.groupedTemplates()
+    .filter(g => g.templates.length || (isAdmin && g.name !== TEMPLATE_CATEGORY_OTHER))
+    .map(g => `
+      <details open class="card" style="padding:0; margin-bottom:14px;">
+        <summary style="padding:12px 16px; cursor:pointer; font-weight:600; font-size:14px; color:var(--olive);">
+          ${escHtml(g.name)} <span style="font-weight:400; font-size:12px; color:var(--ink-light);">(${g.templates.length})</span>
+        </summary>
+        ${g.templates.length ? `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Name</th><th>Subject</th><th>Preview</th><th>Created</th><th></th>
+              </tr></thead>
+              <tbody>${g.templates.map(rowHtml).join('')}</tbody>
+            </table>
+          </div>` : `<div style="padding:4px 16px 14px; font-size:13px; color:var(--ink-light);">No templates in this category yet.</div>`}
+      </details>`).join('');
 
   const html = `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -7583,7 +7666,10 @@ function renderTemplates() {
         <div class="page-title">Email templates</div>
         <div class="page-subtitle">Saved templates for reuse in Send email</div>
       </div>
-      ${isAdmin ? `<button class="btn btn-primary" onclick="openNewTemplateEditor()">➕ New template</button>` : ''}
+      ${isAdmin ? `<div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" onclick="openManageTemplateCategories()">⚙️ Manage categories</button>
+        <button class="btn btn-primary" onclick="openNewTemplateEditor()">➕ New template</button>
+      </div>` : ''}
     </div>
 
     ${templates.length === 0 ? `
@@ -7592,20 +7678,105 @@ function renderTemplates() {
         <div style="font-size:16px; font-weight:500; color:var(--ink-mid); margin-bottom:8px;">No templates yet</div>
         <div style="font-size:13px;">${isAdmin ? 'Click "New template" to create your first reusable email.' : 'No templates have been created yet. Ask your admin to set some up.'}</div>
       </div>
-    ` : `
-      <div class="card" style="padding:0;">
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Name</th><th>Subject</th><th>Preview</th><th>Created</th><th></th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>
-    `}
+    ` : sections}
   `;
   document.getElementById('content-area').innerHTML = html;
+}
+
+// ── Template categories: manage dialog (admin only) ──────────
+function openManageTemplateCategories() {
+  if (currentUser.role !== 'admin') return;
+  const cats = DB.getTemplateCategories();
+  const counts = {};
+  DB.groupedTemplates().forEach(g => { counts[g.name] = g.templates.length; });
+  document.getElementById('active-modal-overlay')?.remove();
+  const rows = cats.map((c, i) => {
+    const n = counts[c] || 0;
+    return `<div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+      <input type="text" class="form-input" value="${escAttr(c)}" maxlength="40" style="flex:1;" onchange="tcRename(${i}, this.value)"/>
+      <span style="font-size:12px; color:var(--ink-light); min-width:84px;">${n} template${n === 1 ? '' : 's'}</span>
+      <button class="btn btn-ghost btn-sm" onclick="tcMove(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button>
+      <button class="btn btn-ghost btn-sm" onclick="tcMove(${i}, 1)" ${i === cats.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="tcDelete(${i})" title="Delete category">🗑️</button>
+    </div>`;
+  }).join('');
+  showModal(`
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <div class="modal-title">Manage template categories</div>
+        <button class="modal-close" onclick="closeModal(); renderTemplates();">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--ink-mid); margin-bottom:12px;">
+          Rename a category by editing its name. Deleting a category moves its templates to <strong>Other</strong>, which is built in and always last.
+        </div>
+        ${rows}
+        <div style="display:flex; gap:6px; margin-top:14px; padding-top:14px; border-top:1px solid var(--olive-pale);">
+          <input type="text" class="form-input" id="tc-new" maxlength="40" placeholder="New category name…" style="flex:1;" onkeydown="if(event.key==='Enter')tcAdd()"/>
+          <button class="btn btn-secondary" onclick="tcAdd()">Add</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal(); renderTemplates();">Done</button>
+      </div>
+    </div>`);
+}
+
+// Returns the cleaned name, or '' (after showing why) if it can't be used.
+function _tcCheckName(raw, ignoreIdx) {
+  const name = (raw || '').trim();
+  if (!name) { showToast('Please enter a category name', 'error'); return ''; }
+  if (name.toLowerCase() === TEMPLATE_CATEGORY_OTHER.toLowerCase()) { showToast('"Other" is built in and always exists', 'error'); return ''; }
+  const dup = DB.getTemplateCategories().some((c, i) => i !== ignoreIdx && c.toLowerCase() === name.toLowerCase());
+  if (dup) { showToast('A category with that name already exists', 'error'); return ''; }
+  return name;
+}
+
+function tcAdd() {
+  const name = _tcCheckName(document.getElementById('tc-new')?.value, -1);
+  if (!name) return;
+  DB.saveTemplateCategories(DB.getTemplateCategories().concat([name]));
+  openManageTemplateCategories();
+  renderTemplates();
+}
+
+function tcRename(i, raw) {
+  const cats = DB.getTemplateCategories();
+  const old = cats[i];
+  const name = _tcCheckName(raw, i);
+  if (name && name !== old) {
+    DB.renameTemplateCategory(old, name);
+    showToast(`Renamed to "${name}"`, 'success');
+  }
+  openManageTemplateCategories();
+  renderTemplates();
+}
+
+function tcMove(i, dir) {
+  const cats = DB.getTemplateCategories();
+  const j = i + dir;
+  if (j < 0 || j >= cats.length) return;
+  [cats[i], cats[j]] = [cats[j], cats[i]];
+  DB.saveTemplateCategories(cats);
+  openManageTemplateCategories();
+  renderTemplates();
+}
+
+function tcDelete(i) {
+  const cats = DB.getTemplateCategories();
+  const name = cats[i];
+  if (cats.length <= 1) { showToast('Keep at least one category — add another before deleting this one', 'error'); return; }
+  const n = DB.groupedTemplates().find(g => g.name === name)?.templates.length || 0;
+  showConfirm('🗑️', 'Delete category',
+    `Delete the category "${escHtml(name)}"?` + (n ? ` Its ${n} template${n === 1 ? '' : 's'} will move to Other.` : ''),
+    'Delete', 'btn-danger',
+    () => {
+      document.getElementById('confirm-overlay')?.remove();
+      DB.deleteTemplateCategory(name);
+      openManageTemplateCategories();
+      renderTemplates();
+      showToast('Category deleted', 'success');
+    });
 }
 
 function loadTemplateById(id) {
@@ -7639,6 +7810,10 @@ function renderTemplateEditor(tmpl) {
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Template name</label>
           <input type="text" class="form-input" id="te-name" value="${escHtml(tmpl?.name||'')}" placeholder="e.g. Session enrollment open"/>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Category</label>
+          <select class="form-select" id="te-category">${_templateCategoryOptions(tmpl ? DB.templateCategoryOf(tmpl) : TEMPLATE_CATEGORY_OTHER)}</select>
         </div>
         <div style="margin-bottom:12px;">
           <div style="font-size:11px; font-weight:700; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">MailMerge placeholders — click to insert</div>
@@ -7717,6 +7892,7 @@ function saveTemplateFromEditor(existingId) {
     createdAt: existing?.createdAt || new Date().toISOString(),
     createdBy: existing?.createdBy || currentUser.email,
     updatedAt: new Date().toISOString(),
+    category:  document.getElementById('te-category')?.value || existing?.category || TEMPLATE_CATEGORY_OTHER,
   };
   DB.saveTemplate(tmpl);
   closeModal();
