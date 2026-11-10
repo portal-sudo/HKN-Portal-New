@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-09.2';
+const APP_VERSION = 'v2026-11-09.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7645,7 +7645,7 @@ function renderTemplates() {
   const sections = DB.groupedTemplates()
     .filter(g => g.templates.length || isAdmin)
     .map(g => `
-      <details open class="card" style="padding:0; margin-bottom:14px;">
+      <details class="card" style="padding:0; margin-bottom:14px;">
         <summary style="padding:12px 16px; cursor:pointer; font-weight:600; font-size:14px; color:var(--olive);">
           ${escHtml(g.name)} <span style="font-weight:400; font-size:12px; color:var(--ink-light);">(${g.templates.length})</span>
         </summary>
