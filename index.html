@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-09.4';
+const APP_VERSION = 'v2026-11-09.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -8912,7 +8912,7 @@ async function showPublicIntake() {
             Our enrollment portal is currently closed for maintenance.<br>
             Please visit <a href="https://www.hindikineev.org" style="color:var(--orange);">hindikineev.org</a>
             for updates or contact us at
-            <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+            <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
           </div>
           <a href="https://www.hindikineev.org" class="btn btn-primary" style="display:inline-block; text-decoration:none;">← Back to website</a>
         </div>`;
@@ -9455,15 +9455,15 @@ function renderIntakeContactSchool(student, reason) {
           teacher aide. Please reach out — we would be delighted to have you.
         ` : isInterest ? `
           In the meantime, if you have any questions please contact us at
-          <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+          <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
         ` : `
-          Please contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+          Please contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
           and we will be happy to discuss re-enrollment options for <strong>${escHtml(firstName)}</strong>.
         `}
       </div>
       ${isGraduated ? `
         <div style="font-size:13px; color:var(--ink-mid); margin-bottom:24px;">
-          Contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+          Contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
         </div>
       ` : ''}
       <a href="https://www.hindikineev.org" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-top:8px;">Done →</a>
@@ -9484,7 +9484,7 @@ function renderIntakeNotYet(student) {
         Please check back soon. You'll be able to complete enrollment here once the school opens registration.
       </div>
       <div style="background:var(--cream-mid); border-radius:var(--radius-md); padding:14px 18px; font-size:13px; color:var(--ink-mid); margin-bottom:24px;">
-        Questions? Contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+        Questions? Contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
       </div>
       <a href="https://www.hindikineev.org" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-top:8px;">Done →</a>
     </div>
@@ -9532,7 +9532,7 @@ function renderIntakeInProcess(student, openSess) {
         </div>
       ` : ''}
       <div style="background:var(--cream-mid); border-radius:var(--radius-md); padding:14px 18px; font-size:13px; color:var(--ink-mid); margin-bottom:24px;">
-        Questions? Contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+        Questions? Contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
       </div>
       <a href="https://www.hindikineev.org" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-top:8px;">Done →</a>
     </div>
@@ -9943,7 +9943,7 @@ function intakeCancelInterest() {
         </div>
         <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px; line-height:1.7;">
           We have withdrawn your interest. Thank you for letting us know. If you change your mind,
-          please contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+          please contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
         </div>
       `;
       intakeGoStep(3);
@@ -9960,7 +9960,7 @@ function renderIntakeInterestUpdated(student) {
     </div>
     <div style="font-size:14px; color:var(--ink-mid); margin-bottom:16px; line-height:1.7;">
       Thank you — we have received your update. The HKN team will reach out by email when enrollment opens.
-      Questions? Contact us at <a href="mailto:info@hindikineev.org" style="color:var(--orange);">info@hindikineev.org</a>
+      Questions? Contact us at <a href="mailto:portal@hindikineev.org" style="color:var(--orange);">portal@hindikineev.org</a>
     </div>
   `;
 }
