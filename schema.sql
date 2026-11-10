@@ -154,7 +154,9 @@ create table if not exists templates (
   subject     text,
   body        text,
   created_by  text,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz default now(),
+  category    text
 );
 
 create table if not exists settings (
@@ -246,6 +248,8 @@ alter table students add column if not exists photo_path text;
 alter table students add column if not exists volunteering jsonb;
 alter table teachers add column if not exists last_login timestamptz;
 alter table settings add column if not exists interest_confirmation_message text;
+alter table templates add column if not exists updated_at timestamptz default now();
+alter table templates add column if not exists category text;
 
 
 -- =====================================================================
