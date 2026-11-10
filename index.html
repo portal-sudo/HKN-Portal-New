@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-09.1';
+const APP_VERSION = 'v2026-11-09.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -7640,10 +7640,10 @@ function renderTemplates() {
     </tr>`;
   };
 
-  // One collapsible section per category. Empty named categories show for admins
-  // (so they know they exist); Other only shows when it has templates.
+  // One collapsible section per category. Empty categories (Other included) show for
+  // admins so they know they exist; teachers only see sections that have templates.
   const sections = DB.groupedTemplates()
-    .filter(g => g.templates.length || (isAdmin && g.name !== TEMPLATE_CATEGORY_OTHER))
+    .filter(g => g.templates.length || isAdmin)
     .map(g => `
       <details open class="card" style="padding:0; margin-bottom:14px;">
         <summary style="padding:12px 16px; cursor:pointer; font-weight:600; font-size:14px; color:var(--olive);">
