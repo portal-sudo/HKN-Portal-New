@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.1';
+const APP_VERSION = 'v2026-11-10.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2339,7 +2339,9 @@ function openInviteReturningDialog() {
   const returning = DB.getStudents().filter(s =>
     s.status === 'Alumni' &&
     prevSess &&
-    (s.sessionData || []).some(sd => sd.session === prevSess.name)
+    // Real enrollment only: skip the blank placeholder entry created when a family was
+    // invited but never enrolled (no class level assigned and fees not paid)
+    (s.sessionData || []).some(sd => sd.session === prevSess.name && (sd.classLevel || sd.feesPaid))
   );
   const waitlist       = DB.getStudents().filter(s => s.status === 'Interest');
   const alreadyInvited = DB.getStudents().filter(s => s.status === 'Invited').length;
