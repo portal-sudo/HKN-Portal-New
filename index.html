@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.10';
+const APP_VERSION = 'v2026-11-10.12';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2288,8 +2288,50 @@ function _remRender() {
   if (el) el.innerHTML = _remInner();
 }
 
+function _remAddDays(d, n) {
+  const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n);
+  const p = v => String(v).padStart(2, '0');
+  return x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate());
+}
+
+// Reminders generated from session class dates. Not stored: only the tick / dismiss state is,
+// as small records with id 'auto:<session>:<key>' in settings.reminders.
+function _remAuto() {
+  const today = _todayLocal();
+  const chron = sortSessionsChronological(DB.getSessions() || []).reverse();   // oldest first
+  const stored = _remList();
+  const out = [];
+  chron.forEach((s, i) => {
+    const cd = (s.classDates || []).slice().sort();
+    if (!cd.length) return;
+    const last = cd[cd.length - 1];
+    if (last < _remAddDays(today, -30)) return;                  // ended long ago
+    const nxt = chron[i + 1];
+    const isFall = /^Fall/.test(s.name), isSpring = /^Spring/.test(s.name);
+    const roll = !!nxt && !isSpring;                              // Spring has no roll forward; new enrollment is in Fall
+    const after = _remAddDays(last, 1);
+    const steps = [];
+    steps.push(['scores', after, `Final scores for ${s.name} assigned by all teachers`]);
+    steps.push(['email', after, `Email families who missed 2+ classes: thanks for ${s.name}${isFall ? ' and Happy Thanksgiving' : ''} (Audit page, Missed classes)`]);
+    steps.push(['backup', after, 'Take a JSON backup (Backup page)']);
+    steps.push(['close', after, roll ? `Sessions page: close ${s.name} and open ${nxt.name}` : `Sessions page: close ${s.name}`]);
+    if (roll) {
+      steps.push(['roll', after, `Dashboard: Roll Forward to ${nxt.name}`]);
+      steps.push(['count', after, 'Check the roll-forward count against the Active students']);
+    }
+    steps.forEach(([key, due, text]) => {
+      if (_remDays(due) > 14) return;                             // show from 14 days before it is due
+      const id = 'auto:' + s.name + ':' + key;
+      const st = stored.find(x => x.id === id) || {};
+      if (st.dismissed) return;
+      out.push({ id, text, due, done: !!st.done, doneDate: st.doneDate || '', repeat: '', auto: true });
+    });
+  });
+  return out;
+}
+
 function _remInner() {
-  const list = _remList();
+  const list = _remList().filter(r => !String(r.id).startsWith('auto:')).concat(_remAuto());
   const open = list.filter(r => !r.done).sort((a, b) => (a.due || '9999') < (b.due || '9999') ? -1 : (a.due || '9999') > (b.due || '9999') ? 1 : 0);
   const done = list.filter(r => r.done).sort((a, b) => (b.doneDate || '') < (a.doneDate || '') ? -1 : 1);
   const dueCount = open.filter(r => { const d = _remDays(r.due); return d !== null && d <= 3; }).length;
@@ -2339,7 +2381,13 @@ function remAdd() {
 
 function remToggle(id) {
   const list = _remList();
-  const r = list.find(x => x.id === id);
+  let r = list.find(x => x.id === id);
+  if (!r && String(id).startsWith('auto:')) {
+    const a = _remAuto().find(x => x.id === id);
+    if (!a) return;
+    r = { id, done: a.done, doneDate: a.doneDate, repeat: '' };
+    list.push(r);
+  }
   if (!r) return;
   r.done = !r.done;
   r.doneDate = r.done ? _todayLocal() : '';
@@ -2351,6 +2399,12 @@ function remToggle(id) {
 }
 
 function remDelete(id) {
+  if (String(id).startsWith('auto:')) {          // generated item: remember that it was dismissed
+    const list = _remList().filter(x => x.id !== id);
+    list.push({ id, dismissed: true });
+    _remSave(list);
+    return;
+  }
   _remSave(_remList().filter(x => x.id !== id));
 }
 
