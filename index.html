@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.6';
+const APP_VERSION = 'v2026-11-10.8';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2099,16 +2099,20 @@ function _capCompute() {
   const levels = DB.getClassLevels();
   const idx = _capSessionIdx();
   const settings = DB.getSettings() || {};
-  // Reference session = the one families are moving up FROM. If a session is open for enrollment it is the
-  // one just before it; otherwise the current session. Students are Active (term running) or Alumni (term closed)
-  // with a real enrollment in it, so the page stays correct before, during and after the term is closed.
-  const asc = sortSessionsChronological(DB.getSessions()).reverse();
-  const open = asc.findIndex(s => s.enrollmentOpen);
-  const active = SessionEngine.getActiveSession();
-  const candidates = [];
-  if (open > 0) candidates.push(asc[open - 1].name);
-  if (active) candidates.push(active.name);
-  asc.slice().reverse().forEach(s => candidates.push(s.name));
+  // Reference session = the session that is running now (or the latest one that has started), i.e. the
+  // one families are moving up FROM. Based on class dates, not on the enrollment-open flag, so a session
+  // that is open for enrollment but hasn't started (or a test session) is never mistaken for it.
+  const today = _todayLocal();
+  const started = DB.getSessions()
+    .filter(s => (s.classDates || []).length && s.classDates[0] <= today)
+    .sort((a, b) => (b.classDates[0] > a.classDates[0] ? 1 : -1));
+  let candidates = started.map(s => s.name);
+  if (!candidates.length) {   // sessions without class dates: fall back to the current session, then older ones
+    const asc = sortSessionsChronological(DB.getSessions()).reverse();
+    const cur = SessionEngine.getActiveSession();
+    const from = cur ? asc.findIndex(s => s.name === cur.name) : asc.length - 1;
+    for (let k = from; k >= 0; k--) candidates.push(asc[k].name);
+  }
   const real = (s, name) => (s.sessionData || []).some(sd => sd.session === name && (sd.classLevel || sd.feesPaid));
   const pool = DB.getStudents().filter(s => s.status === 'Active' || s.status === 'Alumni');
   let refSession = '', students = [];
