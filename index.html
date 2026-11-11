@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.12';
+const APP_VERSION = 'v2026-11-10.13';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10223,8 +10223,58 @@ function renderIntakeBioForm(student, isInterest) {
         <label class="form-label">Alt. contact phone</label>
         <input type="tel" class="form-input" id="ib-altPhone" value="${escHtml(formatPhone(s.altContactPhone||''))}"/>
       </div>
+      ${(s.status === 'Invited' || s.status === 'In-Process') ? _enrollVolunteerHtml(s) : ''}
     `;
   }
+}
+
+// Enrollment form (Invited / In-Process families): volunteering question, prefilled from the saved answer.
+// Ids use the ev- prefix. Saved by intakeSaveBio; the server cleans and stores it.
+function _enrollVolunteerHtml(s) {
+  const v = s.volunteering || {};
+  const yes = v.willing === true, no = v.willing === false;
+  const roles = Array.isArray(v.roles) ? v.roles : [];
+  const a = v.aide || {};
+  const radio = (id, name, val, on, label) => `<label style="display:block; cursor:pointer;"><input type="radio" name="${name}" id="${id}" value="${val}" ${on ? 'checked' : ''} onchange="onEnrollVolChange()"/> ${label}</label>`;
+  return `
+    <div style="font-size:12px; font-weight:700; color:var(--olive); text-transform:uppercase; letter-spacing:0.06em; margin:20px 0 10px;">Volunteering</div>
+    <div class="form-group">
+      <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
+      <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families who volunteer help us serve more students each year, and <strong>when space is limited, we give priority to families who volunteer.</strong> Please confirm your answer is still right, since time has passed.</div>
+      <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ev-vol" id="ev-vol-yes" value="yes" ${yes ? 'checked' : ''} onchange="onEnrollVolChange()"/> Yes</label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ev-vol" id="ev-vol-no" value="no" ${no ? 'checked' : ''} onchange="onEnrollVolChange()"/> No</label>
+      </div>
+      <div id="ev-vol-roles" style="display:${yes ? 'block' : 'none'}; margin:0 0 8px 2px; font-size:14px; line-height:2;">
+        <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
+        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-aide" ${roles.includes('aide') ? 'checked' : ''} onchange="onEnrollVolChange()"/> I'd like to be a teaching assistant for the full year</label>
+        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-greeting" ${roles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
+        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-events" ${roles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
+      </div>
+      <div id="ev-aide-box" style="display:${yes && roles.includes('aide') ? 'block' : 'none'}; background:var(--cream-mid); border-radius:var(--radius-md); padding:14px 16px; margin:0 0 8px; font-size:13px; color:var(--ink-mid); line-height:1.55;">
+        <div style="font-weight:700; color:var(--ink); margin-bottom:4px;">Help in the classroom, and learn to teach</div>
+        Many of our teachers began as parent assistants. As a teaching assistant you work beside an experienced teacher for the whole year (Fall, Winter and Spring), see how a class is planned and run, and take on more as you grow. We place assistants in a different classroom from their own child, at a time within 30 minutes of the child's class.
+        <div style="font-size:13px; font-weight:600; color:var(--ink); margin:10px 0 2px;">Which works for you? <span style="color:var(--danger);">*</span></div>
+        ${radio('ev-aide-earlier', 'ev-aide-timing', 'earlier', a.timing === 'earlier', 'Up to 30 minutes <strong>earlier</strong> than my child\'s class')}
+        ${radio('ev-aide-later', 'ev-aide-timing', 'later', a.timing === 'later', 'Up to 30 minutes <strong>later</strong> than my child\'s class')}
+        ${radio('ev-aide-either', 'ev-aide-timing', 'either', a.timing === 'either', '<strong>Either</strong> works for me')}
+        <div style="font-size:12px; color:var(--ink-light); margin:8px 0 3px;">Optional: tell us what draws you to this.</div>
+        <textarea class="form-textarea" id="ev-aide-note" rows="2" maxlength="500">${escHtml(a.note || '')}</textarea>
+        <div style="font-size:12px; color:var(--ink-light); margin-top:6px;">If your availability has changed, simply leave the teaching assistant box unticked. You can still help in another way.</div>
+      </div>
+    </div>`;
+}
+
+// Enrollment form: show roles for "Yes", the teaching-assistant box when that role is ticked
+function onEnrollVolChange() {
+  const yes = !!document.getElementById('ev-vol-yes')?.checked;
+  const box = document.getElementById('ev-vol-roles');
+  if (box) box.style.display = yes ? 'block' : 'none';
+  if (!yes) ['aide','greeting','events'].forEach(r => { const cb = document.getElementById('ev-vol-' + r); if (cb) cb.checked = false; });
+  const aide = yes && !!document.getElementById('ev-vol-aide')?.checked;
+  const ab = document.getElementById('ev-aide-box');
+  if (ab) ab.style.display = aide ? 'block' : 'none';
+  if (!aide) document.querySelectorAll('input[name="ev-aide-timing"]').forEach(r => { r.checked = false; });
 }
 
 // Interest form: show the volunteer-role checkboxes only for "Yes"; clear them on "No"
@@ -10301,6 +10351,28 @@ async function intakeSaveBio() {
     }
   }
 
+  // ── Volunteering on the enrollment form (only present for Invited / In-Process families) ──
+  const _evPresent = !!document.getElementById('ev-vol-yes');
+  if (_evPresent) {
+    const evYes = document.getElementById('ev-vol-yes').checked;
+    const evNo  = document.getElementById('ev-vol-no').checked;
+    if (!evYes && !evNo) {
+      showToast('Please tell us whether you\'d be willing to volunteer', 'error');
+      document.getElementById('ev-vol-yes')?.focus();
+      return;
+    }
+    if (evYes && !['aide','greeting','events'].some(r => document.getElementById('ev-vol-' + r)?.checked)) {
+      showToast('Please select at least one way you\'d be willing to help', 'error');
+      document.getElementById('ev-vol-aide')?.focus();
+      return;
+    }
+    if (evYes && document.getElementById('ev-vol-aide')?.checked && !document.querySelector('input[name="ev-aide-timing"]:checked')) {
+      showToast('Please choose which class timing works for you as a teaching assistant', 'error');
+      document.getElementById('ev-aide-earlier')?.focus();
+      return;
+    }
+  }
+
   let updated;
 
   if (isReturning) {
@@ -10315,6 +10387,17 @@ async function intakeSaveBio() {
       altContactEmail:     document.getElementById('ib-altEmail')?.value || s.altContactEmail || '',
       altContactPhone:     document.getElementById('ib-altPhone')?.value || s.altContactPhone || '',
     };
+    if (_evPresent) {
+      const evYes   = !!document.getElementById('ev-vol-yes').checked;
+      const evRoles = evYes ? ['aide','greeting','events'].filter(r => document.getElementById('ev-vol-' + r)?.checked) : [];
+      updated.volunteering = { willing: evYes, roles: evRoles };
+      if (evRoles.includes('aide')) {
+        updated.volunteering.aide = {
+          timing: document.querySelector('input[name="ev-aide-timing"]:checked')?.value || '',
+          note:   (document.getElementById('ev-aide-note')?.value || '').trim().slice(0, 500),
+        };
+      }
+    }
 
     // Invited student completing intake form — promote to In-Process if assessment is done
     if (s.status === 'Invited') {
