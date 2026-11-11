@@ -171,6 +171,7 @@ create table if not exists settings (
   interest_confirmation_message text,
   reconfirm_session        text,
   capacity_plan            jsonb,
+  reminders                jsonb,
   inactivity_minutes       integer default 45
 );
 
@@ -254,6 +255,7 @@ alter table settings add column if not exists interest_confirmation_message text
 alter table students add column if not exists reenroll_intent jsonb;
 alter table settings add column if not exists reconfirm_session text;
 alter table settings add column if not exists capacity_plan jsonb;
+alter table settings add column if not exists reminders jsonb;
 alter table templates add column if not exists updated_at timestamptz default now();
 alter table templates add column if not exists category text;
 
