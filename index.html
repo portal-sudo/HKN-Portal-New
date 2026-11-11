@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-11.3';
+const APP_VERSION = 'v2026-11-11.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10043,7 +10043,7 @@ function renderIntakeInProcess(student, openSess) {
         Thank you — we have received <strong>${escHtml(firstName)}'s</strong> enrollment
         ${openSess ? `for <strong>${escHtml(openSess.name)}</strong>` : ''}.
         ${feesPaid
-          ? '<span style="color:var(--success); font-weight:600;">✓ Payment received — enrollment confirmed.</span>'
+          ? '<span style="color:var(--success); font-weight:600;">✓ Payment received — class assignment in progress.</span>'
           : 'Confirmation is pending receipt of the enrollment fee.'}
       </div>
       ${!feesPaid && openSess ? `
