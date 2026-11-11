@@ -131,6 +131,7 @@ create table if not exists students (
   last_parent_access      timestamptz,
   photo_path              text,
   volunteering            jsonb,
+  reenroll_intent         jsonb,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
 );
@@ -168,6 +169,8 @@ create table if not exists settings (
   staff_enabled            boolean default false,
   active_student_message   text,
   interest_confirmation_message text,
+  reconfirm_session        text,
+  capacity_plan            jsonb,
   inactivity_minutes       integer default 45
 );
 
@@ -248,6 +251,9 @@ alter table students add column if not exists photo_path text;
 alter table students add column if not exists volunteering jsonb;
 alter table teachers add column if not exists last_login timestamptz;
 alter table settings add column if not exists interest_confirmation_message text;
+alter table students add column if not exists reenroll_intent jsonb;
+alter table settings add column if not exists reconfirm_session text;
+alter table settings add column if not exists capacity_plan jsonb;
 alter table templates add column if not exists updated_at timestamptz default now();
 alter table templates add column if not exists category text;
 
@@ -383,6 +389,7 @@ as $function$
     'intakeEnabled',        s.intake_enabled,
     'activeStudentMessage', s.active_student_message,
     'interestConfirmationMessage', s.interest_confirmation_message,
+    'reconfirmSession',     s.reconfirm_session,
     'sessions', (
       select json_agg(
         json_build_object(
@@ -424,78 +431,146 @@ create or replace function save_student_from_intake(student_json json)
 returns json
 language plpgsql
 security definer
+set search_path = public
 as $function$
 declare
-  s json := student_json;
+  s         jsonb := student_json::jsonb;
+  v_id      text  := s->>'id';
+  cur       students%rowtype;
+  v_email   text  := lower(trim(coalesce(s->>'lookupEmail','')));
+  v_first   text  := lower(trim(coalesce(s->>'lookupFirstName','')));
+  v_dob     text  := coalesce(s->>'lookupDob','');
+  v_status  text  := s->>'status';
+  v_notes   text  := left(coalesce(s->>'notes',''), 5000);
+  v_vol     jsonb := nullif(s->'volunteering', 'null'::jsonb);
+  v_intent  jsonb := nullif(s->'reenrollIntent', 'null'::jsonb);
+  v_recon   text;
+  v_open    text;
+  v_now     timestamptz := now();
 begin
-  insert into students (
-    id, student_id, status,
-    first_name, last_name,
-    parent_first_name, parent_last_name, parent_email,
-    phone, dob, address, grade,
-    alt_contact_first_name, alt_contact_last_name,
-    alt_contact_email, alt_contact_phone,
-    speaking_score, reading_score, writing_score,
-    intake_assessed, intake_assessed_date,
-    notes, "timestamp",
-    session_data, status_history,
-    last_parent_access,
-    volunteering,
-    updated_at
-  ) values (
-    s->>'id',
-    nullif(s->>'studentId', ''),
-    s->>'status',
-    s->>'firstName',
-    s->>'lastName',
-    s->>'parentFirstName',
-    s->>'parentLastName',
-    s->>'parentEmail',
-    s->>'phone',
-    nullif(s->>'dob', '')::date,
-    s->>'address',
-    s->>'grade',
-    s->>'altContactFirstName',
-    s->>'altContactLastName',
-    s->>'altContactEmail',
-    s->>'altContactPhone',
-    coalesce((s->>'speakingScore')::int, 0),
-    coalesce((s->>'readingScore')::int, 0),
-    coalesce((s->>'writingScore')::int, 0),
-    coalesce((s->>'intakeAssessed')::boolean, false),
-    nullif(s->>'intakeAssessedDate', '')::timestamptz,
-    s->>'notes',
-    nullif(s->>'timestamp', '')::timestamptz,
-    coalesce((s->'sessionData')::jsonb, '[]'::jsonb),
-    coalesce((s->'statusHistory')::jsonb, '[]'::jsonb),
-    now(),
-    nullif((s->'volunteering')::jsonb, 'null'::jsonb),
-    now()
-  )
-  on conflict (id) do update set
-    student_id             = nullif(excluded.student_id, ''),
-    status                 = excluded.status,
-    first_name             = excluded.first_name,
-    last_name              = excluded.last_name,
-    parent_first_name      = excluded.parent_first_name,
-    parent_last_name       = excluded.parent_last_name,
-    parent_email           = excluded.parent_email,
-    phone                  = excluded.phone,
-    dob                    = excluded.dob,
-    address                = excluded.address,
-    grade                  = excluded.grade,
-    alt_contact_first_name = excluded.alt_contact_first_name,
-    alt_contact_last_name  = excluded.alt_contact_last_name,
-    alt_contact_email      = excluded.alt_contact_email,
-    alt_contact_phone      = excluded.alt_contact_phone,
-    notes                  = excluded.notes,
-    session_data           = excluded.session_data,
-    status_history          = excluded.status_history,
-    last_parent_access      = now(),
-    volunteering            = coalesce(excluded.volunteering, students.volunteering),
-    updated_at              = now();
+  if v_id is null or length(v_id) > 60 then
+    raise exception 'invalid id';
+  end if;
 
-  return json_build_object('saved', true, 'id', s->>'id');
+  select * into cur from students where id = v_id;
+
+  -- ── NEW interest registration ───────────────────────────────
+  if not found then
+    if v_id !~ '^std_[0-9_]{8,40}$' then
+      raise exception 'invalid id';
+    end if;
+    if exists (
+      select 1 from students
+      where lower(parent_email) = lower(s->>'parentEmail')
+        and lower(first_name)   = lower(s->>'firstName')
+        and dob = nullif(s->>'dob','')::date
+    ) then
+      raise exception 'already registered';
+    end if;
+
+    insert into students (
+      id, status, first_name, last_name, parent_first_name, parent_last_name,
+      parent_email, phone, dob, address, grade,
+      alt_contact_first_name, alt_contact_last_name, alt_contact_email, alt_contact_phone,
+      speaking_score, reading_score, writing_score, intake_assessed,
+      notes, "timestamp", session_data, status_history,
+      volunteering, last_parent_access, updated_at
+    ) values (
+      v_id, 'Interest',
+      left(s->>'firstName',100), left(s->>'lastName',100),
+      left(s->>'parentFirstName',100), left(s->>'parentLastName',100),
+      left(s->>'parentEmail',200), left(s->>'phone',40),
+      nullif(s->>'dob','')::date, left(s->>'address',300), left(s->>'grade',20),
+      left(s->>'altContactFirstName',100), left(s->>'altContactLastName',100),
+      left(s->>'altContactEmail',200), left(s->>'altContactPhone',40),
+      0, 0, 0, false,
+      v_notes, v_now, '[]'::jsonb, '[]'::jsonb,
+      v_vol, v_now, v_now
+    );
+    return json_build_object('saved', true, 'id', v_id);
+  end if;
+
+  -- ── EXISTING student: caller must know the lookup details ──
+  if lower(coalesce(cur.parent_email,'')) <> v_email
+     or lower(coalesce(cur.first_name,''))   <> v_first
+     or coalesce(cur.dob::text,'')           <> v_dob then
+    raise exception 'not authorized';
+  end if;
+
+  -- Always-allowed: contact fields + last access
+  update students set
+    phone                  = left(coalesce(s->>'phone', cur.phone),40),
+    address                = left(coalesce(s->>'address', cur.address),300),
+    alt_contact_first_name = left(coalesce(s->>'altContactFirstName', cur.alt_contact_first_name),100),
+    alt_contact_last_name  = left(coalesce(s->>'altContactLastName',  cur.alt_contact_last_name),100),
+    alt_contact_email      = left(coalesce(s->>'altContactEmail',     cur.alt_contact_email),200),
+    alt_contact_phone      = left(coalesce(s->>'altContactPhone',     cur.alt_contact_phone),40),
+    last_parent_access     = v_now,
+    updated_at             = v_now
+  where id = v_id;
+
+  -- Interest: identity fields, volunteering, append-only notes, cancel
+  if cur.status = 'Interest' then
+    update students set
+      first_name        = left(coalesce(s->>'firstName', cur.first_name),100),
+      last_name         = left(coalesce(s->>'lastName', cur.last_name),100),
+      parent_first_name = left(coalesce(s->>'parentFirstName', cur.parent_first_name),100),
+      parent_last_name  = left(coalesce(s->>'parentLastName', cur.parent_last_name),100),
+      parent_email      = left(coalesce(s->>'parentEmail', cur.parent_email),200),
+      dob               = coalesce(nullif(s->>'dob','')::date, cur.dob),
+      grade             = left(coalesce(s->>'grade', cur.grade),20),
+      volunteering      = coalesce(v_vol, cur.volunteering),
+      notes             = case when starts_with(v_notes, coalesce(cur.notes,'')) then v_notes else cur.notes end
+    where id = v_id;
+
+    if v_status = 'Dropped' then
+      update students set
+        status = 'Dropped',
+        status_history = coalesce(cur.status_history,'[]'::jsonb) ||
+          jsonb_build_array(jsonb_build_object('status','Dropped','date',v_now,'trigger','parent-cancelled'))
+      where id = v_id;
+    end if;
+
+  -- Invited -> In-Process once the intake assessment is done (history + blank session entry built here)
+  elsif cur.status = 'Invited' and v_status = 'In-Process' and cur.intake_assessed then
+    select id into v_open from sessions where enrollment_open limit 1;
+    update students set
+      status = 'In-Process',
+      status_history = coalesce(cur.status_history,'[]'::jsonb) ||
+        jsonb_build_array(jsonb_build_object('status','In-Process','date',v_now,'trigger','intake')),
+      session_data = case
+        when v_open is null then cur.session_data
+        when exists (select 1 from jsonb_array_elements(cur.session_data) e where e->>'session' = v_open)
+          then cur.session_data
+        else cur.session_data || jsonb_build_array(jsonb_build_object(
+          'session', v_open, 'teacher','', 'classLevel','', 'bookLevel','',
+          'className','', 'classTime','', 'speakingScore',0, 'readingScore',0, 'writingScore',0,
+          'feesPaid', false, 'paymentDate','', 'notes','', 'attendance','{}'::jsonb,
+          'statusDate', v_now))
+      end
+    where id = v_id;
+
+  -- Active / Alumni families: returning-family confirmation, only while the admin window is open
+  elsif cur.status in ('Active','Alumni') and v_intent is not null then
+    select reconfirm_session into v_recon from settings where id = 1;
+    if v_recon is not null and v_recon <> ''
+       and v_intent->>'session' = v_recon
+       and jsonb_typeof(v_intent->'continuing') = 'boolean' then
+      update students set
+        reenroll_intent = case
+          when cur.reenroll_intent->>'session' = v_recon
+           and (cur.reenroll_intent->>'continuing')::boolean = (v_intent->>'continuing')::boolean
+            then cur.reenroll_intent
+          else jsonb_build_object('session', v_recon,
+                                  'continuing', (v_intent->>'continuing')::boolean,
+                                  'date', v_now)
+        end,
+        volunteering = coalesce(v_vol, cur.volunteering)
+      where id = v_id;
+    end if;
+  end if;
+
+  return json_build_object('saved', true, 'id', v_id);
 end;
 $function$;
 
