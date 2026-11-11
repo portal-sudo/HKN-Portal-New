@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.4';
+const APP_VERSION = 'v2026-11-10.5';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1971,6 +1971,7 @@ function buildSidebar() {
     { id:'classes',  icon:'🏫', label:'Classes' },
     { id:'scoring-guide', icon:'📖', label:'Scoring guide' },
     { id:'school-health', icon:'📈', label:'School Health' },
+    ...(isAdmin ? [{ id:'capacity', icon:'🧮', label:'Capacity planning' }] : []),
     { id:'audit-logs', icon:'🔍', label:'Audit Logs' },
     ...(isAdmin ? [
       { id:'attributes', icon:'⚙️', label:'Settings', children: ATTR_TABS },
@@ -2029,6 +2030,7 @@ function navigateTo(page) {
     classes:     renderClasses,
     'scoring-guide': renderScoringGuide,
     'school-health': renderSchoolHealth,
+    capacity:        renderCapacityPlanning,
     'audit-logs':    renderAuditLogs,
     attributes:  renderAttributesChooser,
     email:       renderEmail,
@@ -2039,6 +2041,183 @@ function navigateTo(page) {
   const fn = pages[page];
   if (fn) fn();
 
+}
+
+// ── CAPACITY PLANNING (admin, read-only projections; only the plan numbers are saved) ──
+function _capPlan() {
+  const p = (DB.getSettings() || {}).capacityPlan || {};
+  return {
+    defaultRate: Number.isFinite(p.defaultRate) ? p.defaultRate : 85,   // % of unanswered families assumed to continue
+    ageCutoff:   Number.isFinite(p.ageCutoff)   ? p.ageCutoff   : 10,
+    rate:        p.rate        || {},   // per current level, overrides defaultRate
+    newByLevel:  p.newByLevel  || {},   // expected brand-new students per next-year level
+    sections:    p.sections    || {},   // per next-year level
+    perSection:  p.perSection  || {},
+  };
+}
+
+function _capSessionIdx() {
+  const m = {};
+  // sortSessionsChronological returns newest first, so reverse it: a higher index = a later session
+  sortSessionsChronological(DB.getSessions()).reverse().forEach((s, i) => { m[s.name] = i; });
+  return m;
+}
+
+// Most recent level on record for a student (latest session that has a class level)
+function _capCurrentLevel(s, idx) {
+  let best = null, bi = -1;
+  (s.sessionData || []).forEach(sd => {
+    if (!sd.classLevel) return;
+    const i = idx[sd.session] ?? -1;
+    if (i >= bi) { bi = i; best = sd.classLevel; }
+  });
+  return best;
+}
+
+function _capYearsInSchool(s) {
+  const sessions = DB.getSessions();
+  let earliest = null;
+  (s.sessionData || []).forEach(sd => {
+    const se = sessions.find(x => x.name === sd.session);
+    let d = null;
+    if (se && se.classDates && se.classDates.length) d = new Date(se.classDates[0] + 'T12:00:00');
+    else if (se && se.year) d = new Date(se.year, (se.term === 'Fall' ? 8 : se.term === 'Winter' ? 0 : 3), 1);
+    if (d && !isNaN(d) && (!earliest || d < earliest)) earliest = d;
+  });
+  return earliest ? (Date.now() - earliest.getTime()) / (365.25 * 86400000) : null;
+}
+
+function _capAge(s) {
+  if (!s.dob) return null;
+  const d = new Date(s.dob + 'T12:00:00');
+  return isNaN(d) ? null : (Date.now() - d.getTime()) / (365.25 * 86400000);
+}
+
+function _capCompute() {
+  const plan = _capPlan();
+  const levels = DB.getClassLevels();
+  const idx = _capSessionIdx();
+  const settings = DB.getSettings() || {};
+  const students = DB.getStudents().filter(s => s.status === 'Active');
+  // Which session's confirmation answers to read: the open window, else the newest one recorded
+  let planSession = settings.reconfirmSession || '';
+  if (!planSession) {
+    let bi = -1;
+    students.forEach(s => { const r = s.reenrollIntent; if (r && r.session && (idx[r.session] ?? -1) >= bi) { bi = idx[r.session] ?? -1; planSession = r.session; } });
+  }
+  const rows = {};
+  const row = l => rows[l] || (rows[l] = { total: 0, cont: 0, notc: 0, none: 0, old: 0, oldNew: 0 });
+  students.forEach(s => {
+    const lvl = _capCurrentLevel(s, idx) || '(no level)';
+    const r = row(lvl);
+    r.total++;
+    const i = s.reenrollIntent;
+    if (i && i.session === planSession && typeof i.continuing === 'boolean') { if (i.continuing) r.cont++; else r.notc++; }
+    else r.none++;
+    const age = _capAge(s), yrs = _capYearsInSchool(s);
+    if (age !== null && age >= plan.ageCutoff) { r.old++; if (yrs !== null && yrs < 2) r.oldNew++; }
+  });
+  const next = {};
+  levels.forEach((l, i) => {
+    const r = rows[l]; if (!r) return;
+    const rate = (Number.isFinite(plan.rate[l]) ? plan.rate[l] : plan.defaultRate) / 100;
+    const target = i + 1 < levels.length ? levels[i + 1] : '(graduating)';
+    next[target] = (next[target] || 0) + r.cont + r.none * rate;
+  });
+  const interest = DB.getStudents().filter(s => s.status === 'Interest').length;
+  return { plan, levels, rows, next, planSession, interest, total: students.length };
+}
+
+function renderCapacityPlanning() {
+  if (currentUser.role !== 'admin') { document.getElementById('content-area').innerHTML = ''; return; }
+  const c = _capCompute();
+  const { plan, levels, rows, next } = c;
+  const num = (id, val, w, extra) => `<input type="number" min="0" id="${id}" value="${val === undefined || val === null ? '' : val}" class="form-input" style="width:${w}px; padding:4px 6px;" onchange="onCapChange()" ${extra || ''}/>`;
+  const curRows = levels.concat(rows['(no level)'] ? ['(no level)'] : []).filter(l => rows[l]).map(l => {
+    const r = rows[l];
+    const rate = Number.isFinite(plan.rate[l]) ? plan.rate[l] : '';
+    return `<tr>
+      <td><strong>${escHtml(l)}</strong></td>
+      <td style="text-align:right;">${r.total}</td>
+      <td style="text-align:right; color:var(--olive);">${r.cont}</td>
+      <td style="text-align:right; color:var(--danger);">${r.notc}</td>
+      <td style="text-align:right;">${r.none}</td>
+      <td style="text-align:right;">${r.old}</td>
+      <td style="text-align:right;">${r.oldNew}</td>
+      <td style="text-align:right;">${l === '(no level)' ? '' : num('cap-rate-' + levels.indexOf(l), rate, 64, `placeholder="${plan.defaultRate}"`)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" style="color:var(--ink-light); padding:12px;">No Active students with a class level yet.</td></tr>`;
+  const nextRows = levels.map(l => {
+    const fromPrev = next[l] || 0;
+    const nw = Number(plan.newByLevel[l]) || 0;
+    const proj = fromPrev + nw;
+    const cap = (Number(plan.sections[l]) || 0) * (Number(plan.perSection[l]) || 0);
+    const diff = Math.round(proj) - cap;
+    const hasCap = cap > 0;
+    return `<tr>
+      <td><strong>${escHtml(l)}</strong></td>
+      <td style="text-align:right;">${fromPrev ? fromPrev.toFixed(1) : '–'}</td>
+      <td style="text-align:right;">${num('cap-new-' + levels.indexOf(l), plan.newByLevel[l], 64)}</td>
+      <td style="text-align:right; font-weight:600;">${proj ? Math.round(proj) : '–'}</td>
+      <td style="text-align:right;">${num('cap-sec-' + levels.indexOf(l), plan.sections[l], 56)}</td>
+      <td style="text-align:right;">${num('cap-per-' + levels.indexOf(l), plan.perSection[l], 56)}</td>
+      <td style="text-align:right;">${hasCap ? cap : '–'}</td>
+      <td style="text-align:right; font-weight:600; color:${!hasCap ? 'var(--ink-light)' : diff > 0 ? 'var(--danger)' : 'var(--olive)'};">${hasCap ? (diff > 0 ? '+' + diff + ' over' : diff < 0 ? (-diff) + ' free' : 'full') : '–'}</td>
+    </tr>`;
+  }).join('');
+  const grad = next['(graduating)'] ? `<div style="font-size:12px; color:var(--ink-light); margin-top:8px;">Graduating from the top level: about ${next['(graduating)'].toFixed(1)} students.</div>` : '';
+  const th = 'style="text-align:right; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-light); padding:6px 8px;"';
+  document.getElementById('content-area').innerHTML = `
+    <div class="page-header">
+      <div class="page-title">Capacity planning</div>
+      <div class="page-subtitle">Projection for next year from today's Active students and the parents' answers. Nothing here changes any student record.</div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-end; font-size:13px; color:var(--ink-mid);">
+        <div>Confirmation answers for: <strong>${escHtml(c.planSession || 'none recorded yet')}</strong></div>
+        <div>Active students: <strong>${c.total}</strong></div>
+        <div>On the interest list (not placed in levels yet): <strong>${c.interest}</strong></div>
+        <div class="form-group" style="margin:0;"><label class="form-label">Unanswered families assumed to continue (%)</label>${num('cap-default-rate', plan.defaultRate, 70)}</div>
+        <div class="form-group" style="margin:0;"><label class="form-label">"Older" means age ≥</label>${num('cap-age', plan.ageCutoff, 60)}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px; overflow-x:auto;">
+      <div class="card-title">Now: by current level</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead><tr><th style="text-align:left; font-size:11px; text-transform:uppercase; color:var(--ink-light); padding:6px 8px;">Level</th>
+          <th ${th}>Active</th><th ${th}>Continuing</th><th ${th}>Not continuing</th><th ${th}>No answer</th>
+          <th ${th}>Older</th><th ${th} title="Older and in their first or second year at HKN (years counted from the earliest session on record)">Older, ≤2 yrs</th>
+          <th ${th} title="Optional: share of this level's unanswered families you expect to continue. Blank uses the default above.">Assume %</th></tr></thead>
+        <tbody>${curRows}</tbody>
+      </table>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <div class="card-title">Next year: projected students vs capacity</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead><tr><th style="text-align:left; font-size:11px; text-transform:uppercase; color:var(--ink-light); padding:6px 8px;">Level</th>
+          <th ${th} title="Students moving up from the level below: continuing plus expected share of unanswered">Moving up</th><th ${th}>New (you enter)</th><th ${th}>Projected</th>
+          <th ${th}>Sections</th><th ${th}>Per section</th><th ${th}>Capacity</th><th ${th}>Over / free</th></tr></thead>
+        <tbody>${nextRows}</tbody>
+      </table>
+      ${grad}
+      <div style="font-size:12px; color:var(--ink-light); margin-top:10px;">Everyone moves up one level. "Older, ≤2 yrs" relies on the earliest session recorded in the portal, so for long-time students it can understate their time at HKN.</div>
+    </div>`;
+}
+
+function onCapChange() {
+  const levels = DB.getClassLevels();
+  const v = id => { const el = document.getElementById(id); if (!el || el.value === '') return undefined; const n = parseFloat(el.value); return Number.isFinite(n) ? n : undefined; };
+  const plan = { defaultRate: v('cap-default-rate'), ageCutoff: v('cap-age'), rate: {}, newByLevel: {}, sections: {}, perSection: {} };
+  levels.forEach((l, i) => {
+    const r = v('cap-rate-' + i); if (r !== undefined) plan.rate[l] = r;
+    const n = v('cap-new-' + i);  if (n !== undefined) plan.newByLevel[l] = n;
+    const s = v('cap-sec-' + i);  if (s !== undefined) plan.sections[l] = s;
+    const p = v('cap-per-' + i);  if (p !== undefined) plan.perSection[l] = p;
+  });
+  const settings = DB.getSettings();
+  settings.capacityPlan = plan;
+  DB.saveSettings(settings);
+  renderCapacityPlanning();
 }
 
 // ── DASHBOARD ────────────────────────────────────────────────
@@ -6508,6 +6687,7 @@ const SupabaseSync = {
         activeStudentMessage: sr.active_student_message,
         interestConfirmationMessage: sr.interest_confirmation_message,
         reconfirmSession:     sr.reconfirm_session || '',
+        capacityPlan:         sr.capacity_plan || null,
         inactivityMinutes:    sr.inactivity_minutes ?? 45,
       };
 
@@ -6706,6 +6886,7 @@ const SupabaseSync = {
       active_student_message: obj.activeStudentMessage ?? null,
       interest_confirmation_message: obj.interestConfirmationMessage ?? null,
       reconfirm_session:      obj.reconfirmSession || null,
+      capacity_plan:          obj.capacityPlan ?? null,
       inactivity_minutes:     obj.inactivityMinutes    ?? 45,
     }], { onConflict: 'id' });
     if (error) console.warn('upsertSettings:', error.message);
