@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.14';
+const APP_VERSION = 'v2026-11-10.15';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10571,7 +10571,7 @@ function renderIntakeInterestUpdated(student) {
 
 // Deposit disclosure, shown inside each payment box
 function _depositNoteHtml() {
-  return `<div style="font-size:12px; color:var(--ink-mid); line-height:1.5; margin-top:10px; padding-top:10px; border-top:1px solid rgba(0,0,0,0.08);"><strong>Please note:</strong> your enrollment fee is treated as a deposit. Final placement depends on factors such as teacher availability, class size, and age composition. In rare cases, this may require us to adjust or cancel a placement even after enrollment is complete, in which case your fee will be fully refunded.</div>`;
+  return `<div style="font-size:14px; color:var(--ink); line-height:1.55; margin-top:14px; padding:12px 14px; background:var(--warning-light); border-left:4px solid var(--orange); border-radius:var(--radius-md);"><div style="font-weight:700; color:var(--orange-dark); margin-bottom:3px;">Please note: your enrollment fee is treated as a deposit.</div>Final placement depends on factors such as teacher availability, class size, and age composition. In rare cases, this may require us to adjust or cancel a placement even after enrollment is complete, in which case your fee will be fully refunded.</div>`;
 }
 
 function renderIntakeConfirmation(student) {
