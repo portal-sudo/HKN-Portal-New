@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.17';
+const APP_VERSION = 'v2026-11-11.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9342,6 +9342,10 @@ function renderIntakeInfoView(student, currentSess) {
   const absent   = pastDates.filter(d => att[d] === 'absent').length;
   const vacation = pastDates.filter(d => att[d] === 'vacation').length;
 
+  // Placement pending: enrolled, classes have not started yet (or no dates set), and teacher or class time not assigned
+  const firstClass = classDates.length ? classDates[0] : '';
+  const placementPending = hasData && (!firstClass || firstClass > today) && (!sd.teacher || !sd.classTime);
+
   // Homework completion summary for current session
   const hw = sd.homeworkDone || {};
   const hwYes = pastDates.filter(d => hw[d] === 'yes').length;
@@ -9371,14 +9375,19 @@ function renderIntakeInfoView(student, currentSess) {
       ${sessName ? (hasData ? `
         <div style="background:var(--olive-pale); border-radius:var(--radius-md); padding:16px 18px; margin-bottom:16px;">
           <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">Current session — ${escHtml(sessName)}</div>
+          ${placementPending ? `
+            <div style="background:var(--warning-light); border-left:4px solid var(--orange); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:12px; font-size:13px; color:var(--ink); line-height:1.55;">
+              <strong style="color:var(--orange-dark);">Enrollment received — class assignment in progress.</strong>
+              Thank you! We're assigning ${escHtml(student.firstName)}'s teacher and class time. Please come back to this portal: they will appear here once they are assigned and finalized.
+            </div>` : ''}
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <div>
               <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Teacher</div>
-              <div style="font-size:14px; font-weight:500; color:var(--ink);">${escHtml(sd.teacher || '—')}</div>
+              <div style="font-size:14px; font-weight:500; color:var(--ink);">${escHtml(sd.teacher || (placementPending ? 'To be assigned' : '—'))}</div>
             </div>
             <div>
               <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Class time</div>
-              <div style="font-size:14px; font-weight:500; color:var(--ink);">${escHtml(sd.classTime || '—')}</div>
+              <div style="font-size:14px; font-weight:500; color:var(--ink);">${escHtml(sd.classTime || (placementPending ? 'To be assigned' : '—'))}</div>
             </div>
             <div>
               <div style="font-size:11px; color:var(--ink-light); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px;">Class Level</div>
@@ -10052,7 +10061,7 @@ function renderIntakeInProcess(student, openSess) {
             Send via Zelle to: <strong>payments@hindikineev.org</strong>
           </div>
           <div style="font-size:12px; color:var(--orange-dark); margin-top:6px;">
-            Once we receive your payment, you'll receive a confirmation email.
+            Once we receive your payment, please come back to this portal to see ${escHtml(firstName)}'s class assignment when it is finalized.
           </div>
           ${_depositNoteHtml()}
         </div>
@@ -10635,7 +10644,7 @@ function renderIntakeConfirmation(student) {
             Send via Zelle to: <strong>payments@hindikineev.org</strong>
           </div>
           <div style="font-size:12px; color:var(--orange-dark); margin-top:6px;">
-            Once we receive your payment, you'll receive a confirmation email completing the enrollment.
+            Once we receive your payment, please come back to this portal to see ${escHtml(student.firstName)}'s class assignment when it is finalized.
           </div>
           ${_depositNoteHtml()}
         </div>
