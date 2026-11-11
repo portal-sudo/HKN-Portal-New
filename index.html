@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.5';
+const APP_VERSION = 'v2026-11-10.6';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2053,6 +2053,7 @@ function _capPlan() {
     newByLevel:  p.newByLevel  || {},   // expected brand-new students per next-year level
     sections:    p.sections    || {},   // per next-year level
     perSection:  p.perSection  || {},
+    teachers:    p.teachers    || {},   // free text per next-year level, e.g. "Anjini, Rina"
   };
 }
 
@@ -2098,7 +2099,23 @@ function _capCompute() {
   const levels = DB.getClassLevels();
   const idx = _capSessionIdx();
   const settings = DB.getSettings() || {};
-  const students = DB.getStudents().filter(s => s.status === 'Active');
+  // Reference session = the one families are moving up FROM. If a session is open for enrollment it is the
+  // one just before it; otherwise the current session. Students are Active (term running) or Alumni (term closed)
+  // with a real enrollment in it, so the page stays correct before, during and after the term is closed.
+  const asc = sortSessionsChronological(DB.getSessions()).reverse();
+  const open = asc.findIndex(s => s.enrollmentOpen);
+  const active = SessionEngine.getActiveSession();
+  const candidates = [];
+  if (open > 0) candidates.push(asc[open - 1].name);
+  if (active) candidates.push(active.name);
+  asc.slice().reverse().forEach(s => candidates.push(s.name));
+  const real = (s, name) => (s.sessionData || []).some(sd => sd.session === name && (sd.classLevel || sd.feesPaid));
+  const pool = DB.getStudents().filter(s => s.status === 'Active' || s.status === 'Alumni');
+  let refSession = '', students = [];
+  for (const name of candidates) {
+    const grp = pool.filter(s => real(s, name));
+    if (grp.length) { refSession = name; students = grp; break; }
+  }
   // Which session's confirmation answers to read: the open window, else the newest one recorded
   let planSession = settings.reconfirmSession || '';
   if (!planSession) {
@@ -2108,7 +2125,8 @@ function _capCompute() {
   const rows = {};
   const row = l => rows[l] || (rows[l] = { total: 0, cont: 0, notc: 0, none: 0, old: 0, oldNew: 0 });
   students.forEach(s => {
-    const lvl = _capCurrentLevel(s, idx) || '(no level)';
+    const refSd = (s.sessionData || []).find(sd => sd.session === refSession);
+    const lvl = (refSd && refSd.classLevel) || '(no level)';
     const r = row(lvl);
     r.total++;
     const i = s.reenrollIntent;
@@ -2125,7 +2143,7 @@ function _capCompute() {
     next[target] = (next[target] || 0) + r.cont + r.none * rate;
   });
   const interest = DB.getStudents().filter(s => s.status === 'Interest').length;
-  return { plan, levels, rows, next, planSession, interest, total: students.length };
+  return { plan, levels, rows, next, planSession, refSession, interest, total: students.length };
 }
 
 function renderCapacityPlanning() {
@@ -2163,6 +2181,7 @@ function renderCapacityPlanning() {
       <td style="text-align:right;">${num('cap-per-' + levels.indexOf(l), plan.perSection[l], 56)}</td>
       <td style="text-align:right;">${hasCap ? cap : '–'}</td>
       <td style="text-align:right; font-weight:600; color:${!hasCap ? 'var(--ink-light)' : diff > 0 ? 'var(--danger)' : 'var(--olive)'};">${hasCap ? (diff > 0 ? '+' + diff + ' over' : diff < 0 ? (-diff) + ' free' : 'full') : '–'}</td>
+      <td><input type="text" id="cap-tch-${levels.indexOf(l)}" value="${escAttr(plan.teachers[l] || '')}" class="form-input" style="min-width:180px; padding:4px 6px;" placeholder="e.g. Anjini, Rina" onchange="onCapChange()"/></td>
     </tr>`;
   }).join('');
   const grad = next['(graduating)'] ? `<div style="font-size:12px; color:var(--ink-light); margin-top:8px;">Graduating from the top level: about ${next['(graduating)'].toFixed(1)} students.</div>` : '';
@@ -2175,7 +2194,7 @@ function renderCapacityPlanning() {
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-end; font-size:13px; color:var(--ink-mid);">
         <div>Confirmation answers for: <strong>${escHtml(c.planSession || 'none recorded yet')}</strong></div>
-        <div>Active students: <strong>${c.total}</strong></div>
+        <div>Moving up from: <strong>${escHtml(c.refSession || 'no session found')}</strong> (${c.total} students)</div>
         <div>On the interest list (not placed in levels yet): <strong>${c.interest}</strong></div>
         <div class="form-group" style="margin:0;"><label class="form-label">Unanswered families assumed to continue (%)</label>${num('cap-default-rate', plan.defaultRate, 70)}</div>
         <div class="form-group" style="margin:0;"><label class="form-label">"Older" means age ≥</label>${num('cap-age', plan.ageCutoff, 60)}</div>
@@ -2196,7 +2215,7 @@ function renderCapacityPlanning() {
       <table style="width:100%; border-collapse:collapse; font-size:13px;">
         <thead><tr><th style="text-align:left; font-size:11px; text-transform:uppercase; color:var(--ink-light); padding:6px 8px;">Level</th>
           <th ${th} title="Students moving up from the level below: continuing plus expected share of unanswered">Moving up</th><th ${th}>New (you enter)</th><th ${th}>Projected</th>
-          <th ${th}>Sections</th><th ${th}>Per section</th><th ${th}>Capacity</th><th ${th}>Over / free</th></tr></thead>
+          <th ${th}>Sections</th><th ${th}>Per section</th><th ${th}>Capacity</th><th ${th}>Over / free</th><th style="text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-light); padding:6px 8px;">Teachers</th></tr></thead>
         <tbody>${nextRows}</tbody>
       </table>
       ${grad}
@@ -2207,12 +2226,13 @@ function renderCapacityPlanning() {
 function onCapChange() {
   const levels = DB.getClassLevels();
   const v = id => { const el = document.getElementById(id); if (!el || el.value === '') return undefined; const n = parseFloat(el.value); return Number.isFinite(n) ? n : undefined; };
-  const plan = { defaultRate: v('cap-default-rate'), ageCutoff: v('cap-age'), rate: {}, newByLevel: {}, sections: {}, perSection: {} };
+  const plan = { defaultRate: v('cap-default-rate'), ageCutoff: v('cap-age'), rate: {}, newByLevel: {}, sections: {}, perSection: {}, teachers: {} };
   levels.forEach((l, i) => {
     const r = v('cap-rate-' + i); if (r !== undefined) plan.rate[l] = r;
     const n = v('cap-new-' + i);  if (n !== undefined) plan.newByLevel[l] = n;
     const s = v('cap-sec-' + i);  if (s !== undefined) plan.sections[l] = s;
     const p = v('cap-per-' + i);  if (p !== undefined) plan.perSection[l] = p;
+    const tn = (document.getElementById('cap-tch-' + i)?.value || '').trim(); if (tn) plan.teachers[l] = tn;
   });
   const settings = DB.getSettings();
   settings.capacityPlan = plan;
