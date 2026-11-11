@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-10.2';
+const APP_VERSION = 'v2026-11-10.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -2343,7 +2343,6 @@ function openInviteReturningDialog() {
     // invited but never enrolled (no class level assigned and fees not paid)
     (s.sessionData || []).some(sd => sd.session === prevSess.name && (sd.classLevel || sd.feesPaid))
   );
-  const waitlist       = DB.getStudents().filter(s => s.status === 'Interest');
   const alreadyInvited = DB.getStudents().filter(s => s.status === 'Invited').length;
 
   // Re-confirmation answer for THIS session: true = continuing, false = not continuing, null = no answer
@@ -2369,16 +2368,6 @@ function openInviteReturningDialog() {
     </label>`;
   }).join('') || `<div style="padding:10px;font-size:13px;color:var(--ink-light);">${prevSess ? 'No alumni from ' + escHtml(prevSess.name) + ' found.' : 'No previous session found.'}</div>`;
 
-  const waitlistRows = waitlist.map(s => `
-    <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--cream-dark);cursor:pointer;">
-      <input type="checkbox" class="invite-waitlist-cb" value="${s.id}" style="accent-color:var(--orange);"/>
-      <div style="flex:1;">
-        <span style="font-size:13px;font-weight:500;">${escHtml(s.firstName)} ${escHtml(s.lastName)}</span>
-        <span style="font-size:11px;color:var(--ink-light);margin-left:8px;">${escHtml(s.parentEmail)}</span>
-      </div>
-      ${s.notes ? `<span style="font-size:11px;color:var(--ink-light);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.notes)}</span>` : ''}
-    </label>`
-  ).join('') || '<div style="padding:10px;font-size:13px;color:var(--ink-light);">No students on interest list.</div>';
 
   showModal(`<div class="modal" style="max-width:680px;">
     <div class="modal-header">
@@ -2387,10 +2376,10 @@ function openInviteReturningDialog() {
     </div>
     <div class="modal-body">
       <div style="background:var(--olive-pale);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--ink-mid);">
-        Select students to promote to <strong>Invited</strong> for <strong>${escHtml(openSess.name)}</strong>.
+        Select returning students to promote to <strong>Invited</strong> for <strong>${escHtml(openSess.name)}</strong>. Interest students are invited individually, after review, from their own record.
         ${alreadyInvited > 0 ? `<span style="color:var(--warning);margin-left:6px;">${alreadyInvited} already invited.</span>` : ''}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
         <div>
           <div style="font-size:11px;font-weight:700;color:var(--olive);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">
             Returning from ${escHtml(prevSess?.name || '—')} (${returning.length})
@@ -2404,24 +2393,6 @@ function openInviteReturningDialog() {
             ${returningRows}
           </div>
         </div>
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--olive);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">
-            Interest list / waitlist (${waitlist.length})
-          </div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.invite-waitlist-cb').forEach(c=>c.checked=true)">All</button>
-            <button class="btn btn-ghost btn-sm" onclick="document.querySelectorAll('.invite-waitlist-cb').forEach(c=>c.checked=false)">None</button>
-          </div>
-          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--olive-mid);border-radius:var(--radius-md);">
-            ${waitlistRows}
-          </div>
-        </div>
-      </div>
-      <div style="margin-top:20px;display:flex;align-items:center;gap:12px;background:var(--cream-dark);border-radius:var(--radius-md);padding:12px 16px;">
-        <label style="font-size:13px;color:var(--ink-mid);font-weight:500;">Invitation expires in</label>
-        <input type="number" id="invite-expiry-days" value="14" min="1" max="60" style="width:64px;" class="form-input" oninput="updateInviteExpiryLabel()"/>
-        <span style="font-size:13px;color:var(--ink-mid);">days</span>
-        <span style="font-size:12px;color:var(--ink-light);margin-left:8px;" id="invite-expiry-label"></span>
       </div>
     </div>
     <div class="modal-footer">
@@ -2430,7 +2401,6 @@ function openInviteReturningDialog() {
     </div>
   </div>`);
 
-  setTimeout(updateInviteExpiryLabel, 50);
 }
 
 function openBookNeedsDialog() {
@@ -2619,20 +2589,9 @@ function executeRollForward(prevSessName, newSessName) {
   showToast(rolled + ' student' + (rolled !== 1 ? 's' : '') + ' rolled forward to ' + newSessName, 'success');
 }
 
-function updateInviteExpiryLabel() {
-  const days   = parseInt(document.getElementById('invite-expiry-days')?.value) || 14;
-  const expiry = new Date(Date.now() + days * 86400000);
-  const el     = document.getElementById('invite-expiry-label');
-  if (el) el.textContent = '(expires ' + expiry.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) + ')';
-}
-
 function executeInviteReturning() {
-  const days       = parseInt(document.getElementById('invite-expiry-days')?.value) || 14;
-  const expiryDate = new Date(Date.now() + days * 86400000).toISOString();
-
   const returningIds = Array.from(document.querySelectorAll('.invite-returning-cb:checked')).map(c => c.value);
-  const waitlistIds  = Array.from(document.querySelectorAll('.invite-waitlist-cb:checked')).map(c => c.value);
-  const allIds       = [...new Set([...returningIds, ...waitlistIds])];
+  const allIds       = [...new Set(returningIds)];
 
   if (allIds.length === 0) { showToast('No students selected', 'warning'); return; }
 
@@ -2641,7 +2600,6 @@ function executeInviteReturning() {
     const s = DB.getStudent(id);
     if (!s || s.status === 'Invited') return;
     s.status       = 'Invited';
-    s.inviteExpiry = expiryDate;
     s.statusHistory = [...(s.statusHistory || []), { status: 'Invited', date: new Date().toISOString(), trigger: 'admin' }];
     DB.saveStudent(s);
     invited++;
@@ -2650,8 +2608,7 @@ function executeInviteReturning() {
   closeModal();
   renderDashboard();
   const sessName = DB.getSessions().find(s => s.enrollmentOpen)?.name || 'enrollment';
-  showToast(invited + ' student' + (invited !== 1 ? 's' : '') + ' invited for ' + sessName +
-    ' — expires ' + new Date(expiryDate).toLocaleDateString('en-US', { month:'short', day:'numeric' }), 'success');
+  showToast(invited + ' student' + (invited !== 1 ? 's' : '') + ' invited for ' + sessName, 'success');
 }
 
 function confirmSetAlumni() {
