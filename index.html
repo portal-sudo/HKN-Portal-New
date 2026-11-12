@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-12.2';
+const APP_VERSION = 'v2026-11-12.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -1633,6 +1633,8 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 let currentUser = null; // { email, role }
 let currentStudentFilter = {};
 let currentSort = { col: 'name', dir: 'asc' }; // directory sort state
+let dirMode = 'directory';        // 'directory' or 'volunteers': the Volunteers tab reuses the directory page
+let volFilterMemory = null;       // last filters used on the Volunteers tab, restored when you come back to it
 let _emailPreselectIds = []; // student IDs pre-selected from fees tracker (or other sources)
 let _emailPreselectLabel = ''; // describes why, shown in the Send Email banner
 let _emailPreselectTemplate = null; // { subject, body } to auto-fill, one-time use
@@ -1961,6 +1963,7 @@ function buildSidebar() {
     { section: 'Overview' },
     { id:'dashboard', icon:'📊', label:'Dashboard' },
     { id:'directory', icon:'👥', label:'Student directory' },
+    { id:'volunteers', icon:'🙋', label:'Volunteers' },
     { section: 'Students' },
     ...(!isMobile ? [{ id:'email', icon:'✉️', label:'Send email' }, { id:'templates', icon:'📋', label:'Email templates' }] : []),
     { id:'cd-tracks', icon:'🎵', label:'CD Tracks' },
@@ -2018,13 +2021,15 @@ function navigateTo(page) {
   document.getElementById(`nav-${page}`)?.classList.add('active');
   // Default directory filters to Active status + current session
   const _currSess = (SessionEngine.getActiveSession() || DB.getSessions().slice(-1)[0])?.name || '';
+  dirMode = (page === 'volunteers') ? 'volunteers' : 'directory';
   currentStudentFilter = (page === 'directory' || page === 'add-student')
     ? { status: 'Active', session: _currSess }
-    : {};
+    : (page === 'volunteers' ? { ...(volFilterMemory || {}) } : {});   // Volunteers: all statuses and sessions, then your last filters
   currentSort = { col: 'name', dir: 'asc' };
   const pages = {
     dashboard:   renderDashboard,
     directory:   renderDirectory,
+    volunteers:  renderDirectory,
     'add-student': () => { renderDirectory(); openStudentModal(null); },
     sessions:    renderSessions,
     classes:     renderClasses,
@@ -3035,11 +3040,11 @@ function renderDirectory() {
   const html = `
     <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between;">
       <div>
-        <div class="page-title">Student directory</div>
-        <div class="page-subtitle">All students — click a row to view or edit</div>
+        <div class="page-title">${dirMode === 'volunteers' ? 'Volunteers' : 'Student directory'}</div>
+        <div class="page-subtitle">${dirMode === 'volunteers' ? 'Students and what their families offered to help with — click a row to view or edit' : 'All students — click a row to view or edit'}</div>
       </div>
       <div style="display:flex; gap:8px;">
-        ${currentUser.role === 'admin' ? `<button class="btn btn-primary" onclick="openStudentModal(null)">➕ Add student</button>` : ''}
+        ${currentUser.role === 'admin' && dirMode !== 'volunteers' ? `<button class="btn btn-primary" onclick="openStudentModal(null)">➕ Add student</button>` : ''}
       </div>
     </div>
     <div class="filter-bar">
@@ -3086,12 +3091,17 @@ function renderDirectory() {
       </select>
       <select class="form-select" id="filter-teacher" onchange="renderStudentTable()">
         <option value="">All teachers</option>
-        ${DB.teacherNames().map(t => `<option value="${t}">${t}</option>`).join('')}
+        ${DB.teacherNames().map(t => `<option value="${t}" ${currentStudentFilter.teacher===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <select class="form-select" id="filter-level" onchange="renderStudentTable()">
         <option value="">All levels</option>
-        ${classLevels.map(l => `<option value="${l}">${l}</option>`).join('')}
+        ${classLevels.map(l => `<option value="${l}" ${currentStudentFilter.classLevel===l?'selected':''}>${l}</option>`).join('')}
       </select>
+      ${dirMode === 'volunteers' ? `
+      <select class="form-select" id="filter-vol" onchange="renderStudentTable()">
+        ${[['', 'All volunteering answers'], ['willing', 'Willing to help (any)'], ['aide', 'Teaching assistant'], ['greeting', 'Greeting students'], ['events', 'Special events'], ['no', 'Not willing'], ['none', 'Not asked yet']]
+          .map(([v, l]) => `<option value="${v}" ${(currentStudentFilter.vol || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>` : ''}
     </div>
     <div id="student-count" style="font-size:12px; color:var(--ink-light); margin-bottom:10px;"></div>
     <div class="card" style="padding:0;">
@@ -3164,11 +3174,14 @@ function renderStudentTable() {
   const status  = document.getElementById('filter-status')?.value || '';
   const teacher = document.getElementById('filter-teacher')?.value || '';
   const classLevel = document.getElementById('filter-level')?.value || '';
+  const vol = dirMode === 'volunteers' ? (document.getElementById('filter-vol')?.value || '') : '';
 
   // Persist current filter selections so they survive modal open/close re-renders
-  currentStudentFilter = { name, session, status, teacher, classLevel };
+  currentStudentFilter = { name, session, status, teacher, classLevel, vol };
+  if (dirMode === 'volunteers') volFilterMemory = { ...currentStudentFilter };
 
   let students = DB.searchStudents({ name, session, status, teacher, classLevel });
+  if (vol) students = students.filter(s => volunteeringMatches(s.volunteering, vol));
 
   // Sort
   const activeSessForSort = SessionEngine.getActiveSession();
@@ -3197,6 +3210,10 @@ function renderStudentTable() {
       case 'date':    va = a.timestamp||''; vb = b.timestamp||''; break;
       case 'lastaccess': va = a.lastParentAccess||''; vb = b.lastParentAccess||''; break;   // never-visited ('') sorts first when ascending
       case 'age':     va = a.dob||''; vb = b.dob||''; break;
+      case 'vol': {
+        const vk = s => { const v = s.volunteering; return !v || typeof v.willing !== 'boolean' ? '3' : v.willing ? '1' + (v.roles || []).slice().sort().join(',') : '2'; };
+        va = vk(a); vb = vk(b); break;
+      }
       default:        va = ''; vb = '';
     }
     return va < vb ? -dir : va > vb ? dir : 0;
@@ -3247,7 +3264,7 @@ function renderStudentTable() {
   const thead = document.getElementById('dir-thead-row');
   if (thead) thead.innerHTML =
     th('id','ID') + th('name','Student name') + th('parent','Parent') + th('status','Status') +
-    th('age', 'Age — DoB') +
+    (dirMode === 'volunteers' ? th('vol', 'Volunteering') : th('age', 'Age — DoB')) +
     (isDateMode  ? th('date', dateColLabel) : '') +
     (isDateMode  ? th('lastaccess', 'Last portal visit') : '') +
     (showSession ? th('session','Session') : '') +
@@ -3304,7 +3321,7 @@ function renderStudentTable() {
         <td style="font-weight:500;">${s.firstName} ${s.lastName}</td>
         <td style="color:var(--ink-light);">${s.parentFirstName} ${s.parentLastName}</td>
         <td><span class="badge badge-${(s.status||'').toLowerCase().replace('-','').replace(' ','')}">${s.status}</span></td>
-        ${dobCell}${dateCell}${visitCell}${sessionCell}${teacherCell}${levelCell}
+        ${dirMode === 'volunteers' ? `<td style="font-size:12px;">${volunteeringShortHtml(s.volunteering)}</td>` : dobCell}${dateCell}${visitCell}${sessionCell}${teacherCell}${levelCell}
         <td onclick="event.stopPropagation();"></td>
       </tr>
     `;
@@ -3345,6 +3362,27 @@ function volunteeringSummaryHtml(v) {
   const note = (ai.note || '').trim();
   return 'Yes' + (roles.length ? ' — ' + roles.join(', ') : '') +
     (note ? '<div style="margin-top:4px; font-size:13px; white-space:pre-wrap;"><span style="color:var(--ink-light);">Aide note:</span> ' + escHtml(note) + '</div>' : '');
+}
+
+// Short text for the Volunteers table: "Yes: Aide (earlier or later), Events", "No", or "—" if never asked
+function volunteeringShortHtml(v) {
+  if (!v || typeof v.willing !== 'boolean') return '<span style="color:var(--ink-light);">—</span>';
+  if (!v.willing) return 'No';
+  const labels = { aide: 'Teaching assistant', greeting: 'Greeting', events: 'Special events' };
+  const timing = { earlier: 'earlier', later: 'later', either: 'earlier or later' };
+  const roles = (Array.isArray(v.roles) ? v.roles : []).map(r =>
+    escHtml(labels[r] || r) + (r === 'aide' && v.aide && timing[v.aide.timing] ? ' (' + timing[v.aide.timing] + ')' : ''));
+  return 'Yes' + (roles.length ? ': ' + roles.join(', ') : '');
+}
+
+// Volunteers tab filter: '' = everyone, 'willing', 'no', 'none' (never asked), or a role key
+function volunteeringMatches(v, f) {
+  const asked = !!v && typeof v.willing === 'boolean';
+  if (!f) return true;
+  if (f === 'none') return !asked;
+  if (f === 'no') return asked && v.willing === false;
+  if (f === 'willing') return asked && v.willing === true;
+  return asked && v.willing === true && Array.isArray(v.roles) && v.roles.includes(f);
 }
 
 // ── STUDENT MODAL ─────────────────────────────────────────────
