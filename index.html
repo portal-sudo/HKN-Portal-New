@@ -1624,7 +1624,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-12.1';
+const APP_VERSION = 'v2026-11-12.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10182,7 +10182,7 @@ function renderIntakeBioForm(student, isInterest) {
       <div class="form-group">
         <label class="form-label">${isEdit ? "What's new about the language at home or your child's Hindi learning?" : "Language at home and your child's Hindi background"} <span style="color:var(--danger);">*</span></label>
         <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 6px;">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
-        <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. We mostly speak Gujarati at home, with some English. Our child understands a little Hindi from grandparents and took a weekend Hindi class for a year…"></textarea>
+        <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. We mostly speak Gujarati at home, with some English. Our child understands a little Hindi from grandparents and took a weekend Hindi class for a year. My child is not familiar with the Hindi script and characters…"></textarea>
         <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — this helps us understand your child's level before placement."}</div>
       </div>
       <div class="form-group" style="margin-top:16px;">
