@@ -317,6 +317,15 @@ tbody tr { transition: background var(--transition); }
 /* ── FILTER BAR ────────────────────────────────────────────── */
 .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .filter-bar .form-input { max-width: 220px; }
+/* Parent forms: prominent questions (volunteering etc.) */
+.pv-q { font-size:18px; font-weight:800; color:var(--ink); line-height:1.35; margin-bottom:8px; }
+.pv-callout { background:var(--warning-light); border-left:5px solid var(--orange); border-radius:var(--radius-md); padding:12px 14px; font-size:16px; line-height:1.55; color:var(--ink); margin:6px 0 12px; }
+.pv-callout strong { color:var(--orange-dark); }
+.pv-yn { display:flex; gap:28px; margin:8px 0; }
+.pv-opt { display:flex; align-items:center; gap:10px; font-size:17px; font-weight:600; color:var(--ink); margin:8px 0; cursor:pointer; line-height:1.4; }
+.pv-opt input { width:20px; height:20px; accent-color:var(--orange); flex-shrink:0; }
+.pv-hint { font-size:15px; font-weight:700; color:var(--ink); line-height:1.5; margin-top:6px; }
+
 .filter-bar .form-select { max-width: 160px; }
 
 /* ── LOGIN SCREEN ──────────────────────────────────────────── */
@@ -1624,7 +1633,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-12.4';
+const APP_VERSION = 'v2026-11-18.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9859,16 +9868,16 @@ function _reconfirmCardHtml(student) {
   const answered = ri && ri.session === sess && typeof ri.continuing === 'boolean';
   if (answered) {
     return `<div style="background:var(--success-light, #EAF4EA); border-left:4px solid var(--olive); border-radius:var(--radius-md); padding:14px 18px; margin:16px 0; text-align:left;">
-      <div style="font-size:11px; font-weight:700; color:var(--olive); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">✅ Your reply for ${escHtml(sess)}</div>
-      <div style="font-size:14px; color:var(--ink); line-height:1.6;">${ri.continuing
+      <div style="font-size:16px; font-weight:800; color:var(--olive); margin-bottom:6px;">✅ Your reply for ${escHtml(sess)}</div>
+      <div style="font-size:15px; color:var(--ink); line-height:1.6;">${ri.continuing
         ? `You told us <strong>${first}</strong> plans to continue.`
         : `You told us <strong>${first}</strong> will not be continuing.`}
         <a href="#" onclick="intakeShowReconfirmForm(); return false;" style="color:var(--orange); font-weight:600; margin-left:6px;">Change my answer</a></div>
     </div>`;
   }
-  return `<div style="background:#FFF3E0; border-left:4px solid var(--orange); border-radius:var(--radius-md); padding:16px 20px; margin:16px 0; text-align:left;">
-    <div style="font-size:11px; font-weight:700; color:var(--orange); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">⚠️ Action needed — ${escHtml(sess)}</div>
-    <div style="font-size:14px; color:var(--ink); line-height:1.7; margin-bottom:10px;">
+  return `<div style="background:#FFF3E0; border-left:6px solid var(--orange); border-radius:var(--radius-md); padding:18px 20px; margin:16px 0; text-align:left;">
+    <div style="font-size:18px; font-weight:800; color:var(--orange-dark); margin-bottom:8px;">⚠️ Action needed — ${escHtml(sess)}</div>
+    <div style="font-size:16px; color:var(--ink); line-height:1.6; margin-bottom:12px;">
       Please let us know whether <strong>${first}</strong> will be continuing at Hindi Ki Neev in ${escHtml(sess)}, and confirm your contact details. It takes about a minute.
     </div>
     <button class="btn btn-primary btn-sm" onclick="intakeShowReconfirmForm()">Respond now →</button>
@@ -9888,15 +9897,15 @@ function intakeShowReconfirmForm() {
     <div style="padding:6px 0 10px;">
       <div style="font-family:var(--serif); font-size:22px; font-weight:600; color:var(--olive); margin-bottom:6px; text-align:center;">Plans for ${escHtml(sess)}</div>
       <div class="form-group" style="margin-top:14px;">
-        <label class="form-label">Will ${escHtml(s.firstName || 'your child')} be continuing at Hindi Ki Neev in ${escHtml(sess)}? <span style="color:var(--danger);">*</span></label>
-        <div style="display:flex; flex-direction:column; gap:6px; margin:6px 0 8px; font-size:14px;">
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="rc-cont" id="rc-yes" ${has && ri.continuing ? 'checked' : ''} onchange="onReconfirmChange()"/> Yes, we plan to continue</label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="rc-cont" id="rc-no" ${has && !ri.continuing ? 'checked' : ''} onchange="onReconfirmChange()"/> No, we will not be continuing</label>
+        <div class="pv-q">Will ${escHtml(s.firstName || 'your child')} be continuing at Hindi Ki Neev in ${escHtml(sess)}? <span style="color:var(--danger);">*</span></div>
+        <div style="display:flex; flex-direction:column; gap:2px; margin:6px 0 8px;">
+          <label class="pv-opt"><input type="radio" name="rc-cont" id="rc-yes" ${has && ri.continuing ? 'checked' : ''} onchange="onReconfirmChange()"/> Yes, we plan to continue</label>
+          <label class="pv-opt"><input type="radio" name="rc-cont" id="rc-no" ${has && !ri.continuing ? 'checked' : ''} onchange="onReconfirmChange()"/> No, we will not be continuing</label>
         </div>
-        <div style="font-size:12px; color:var(--ink-light);">This is not a registration — the school will email you an enrollment invitation. You can change your answer here until the window closes.</div>
+        <div style="font-size:14px; color:var(--ink-mid); line-height:1.5;">This is not a registration — the school will email you an enrollment invitation. You can change your answer here until the window closes.</div>
       </div>
       <div id="rc-details" style="display:${has && ri.continuing ? 'block' : 'none'};">
-        <div style="font-size:12px; font-weight:700; color:var(--olive); text-transform:uppercase; letter-spacing:0.06em; margin:16px 0 10px;">Please confirm your contact details</div>
+        <div style="font-size:17px; font-weight:800; color:var(--olive); margin:18px 0 10px; padding-top:12px; border-top:2px solid var(--olive-mid);">Please confirm your contact details</div>
         <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Home address</label>
           <input type="text" class="form-input" id="rc-address" value="${escHtml(s.address||'')}"/></div>
         <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Phone number</label>
@@ -9910,17 +9919,17 @@ function intakeShowReconfirmForm() {
         <div class="form-group" style="margin-bottom:12px;"><label class="form-label">Alt. contact phone</label>
           <input type="tel" class="form-input" id="rc-altPhone" value="${escHtml(formatPhone(s.altContactPhone||''))}"/></div>
         <div class="form-group" style="margin-top:16px;">
-          <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
-          <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
-          <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
-            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="rc-vol" id="rc-vol-yes" ${volYes ? 'checked' : ''} onchange="onReconfirmChange()"/> Yes</label>
-            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="rc-vol" id="rc-vol-no" ${volNo ? 'checked' : ''} onchange="onReconfirmChange()"/> No</label>
+          <div class="pv-q">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></div>
+          <div class="pv-callout">HKN runs entirely on parent volunteers. Families who volunteer help us serve more students each year, and <strong>when space is limited, we give priority to families who volunteer.</strong></div>
+          <div class="pv-yn">
+            <label class="pv-opt"><input type="radio" name="rc-vol" id="rc-vol-yes" ${volYes ? 'checked' : ''} onchange="onReconfirmChange()"/> Yes</label>
+            <label class="pv-opt"><input type="radio" name="rc-vol" id="rc-vol-no" ${volNo ? 'checked' : ''} onchange="onReconfirmChange()"/> No</label>
           </div>
-          <div id="rc-vol-roles" style="display:${volYes ? 'block' : 'none'}; margin:0 0 8px 2px; font-size:14px; line-height:2;">
-            <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
-            <label style="display:block; cursor:pointer;"><input type="checkbox" id="rc-vol-aide" ${roles.includes('aide') ? 'checked' : ''}/> Teacher's aide in the classroom</label>
-            <label style="display:block; cursor:pointer;"><input type="checkbox" id="rc-vol-greeting" ${roles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
-            <label style="display:block; cursor:pointer;"><input type="checkbox" id="rc-vol-events" ${roles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
+          <div id="rc-vol-roles" style="display:${volYes ? 'block' : 'none'}; margin:0 0 8px 2px;">
+            <div class="pv-hint">Select any that apply:</div>
+            <label class="pv-opt"><input type="checkbox" id="rc-vol-aide" ${roles.includes('aide') ? 'checked' : ''}/> Teacher's aide in the classroom</label>
+            <label class="pv-opt"><input type="checkbox" id="rc-vol-greeting" ${roles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
+            <label class="pv-opt"><input type="checkbox" id="rc-vol-events" ${roles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
           </div>
         </div>
       </div>
@@ -10218,23 +10227,23 @@ function renderIntakeBioForm(student, isInterest) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">${isEdit ? "What's new about the language at home or your child's Hindi learning?" : "Language at home and your child's Hindi background"} <span style="color:var(--danger);">*</span></label>
-        <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 6px;">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
+        <div class="pv-q">${isEdit ? "What's new about the language at home or your child's Hindi learning?" : "Language at home and your child's Hindi background"} <span style="color:var(--danger);">*</span></div>
+        <div style="font-size:15px; color:var(--ink); line-height:1.55; margin:2px 0 8px;">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
         <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. We mostly speak Gujarati at home, with some English. Our child understands a little Hindi from grandparents and took a weekend Hindi class for a year. My child is not familiar with the Hindi script and characters…"></textarea>
-        <div style="font-size:11px; color:var(--ink-light); margin-top:4px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — this helps us understand your child's level before placement."}</div>
+        <div style="font-size:14px; color:var(--ink-mid); margin-top:6px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — this helps us understand your child's level before placement."}</div>
       </div>
       <div class="form-group" style="margin-top:16px;">
-        <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
-        <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families willing to contribute help us serve more students each year, and we're grateful to give volunteering families priority when enrollment space is limited.</div>
-        <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" ${_volYes ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> Yes</label>
-          <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" ${_volNo ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> No</label>
+        <div class="pv-q">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></div>
+        <div class="pv-callout">HKN runs entirely on parent volunteers. Families who volunteer help us serve more students each year, and <strong>when space is limited, we give priority to families who volunteer.</strong></div>
+        <div class="pv-yn">
+          <label class="pv-opt"><input type="radio" name="ib-vol" id="ib-vol-yes" value="yes" ${_volYes ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> Yes</label>
+          <label class="pv-opt"><input type="radio" name="ib-vol" id="ib-vol-no" value="no" ${_volNo ? 'checked' : ''} onchange="onIntakeVolunteerChange()"/> No</label>
         </div>
-        <div id="ib-vol-roles" style="display:${_volYes ? 'block' : 'none'}; margin:0 0 8px 2px; font-size:14px; line-height:2;">
-          <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-aide" value="aide" ${_volRoles.includes('aide') ? 'checked' : ''}/> Teacher's aide in the classroom</label>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-greeting" value="greeting" ${_volRoles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
-          <label style="display:block; cursor:pointer;"><input type="checkbox" id="ib-vol-events" value="events" ${_volRoles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
+        <div id="ib-vol-roles" style="display:${_volYes ? 'block' : 'none'}; margin:0 0 8px 2px;">
+          <div class="pv-hint">Select any that apply:</div>
+          <label class="pv-opt"><input type="checkbox" id="ib-vol-aide" value="aide" ${_volRoles.includes('aide') ? 'checked' : ''}/> Teacher's aide in the classroom</label>
+          <label class="pv-opt"><input type="checkbox" id="ib-vol-greeting" value="greeting" ${_volRoles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
+          <label class="pv-opt"><input type="checkbox" id="ib-vol-events" value="events" ${_volRoles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
         </div>
       </div>
     `;
@@ -10289,32 +10298,33 @@ function _enrollVolunteerHtml(s) {
   const yes = v.willing === true, no = v.willing === false;
   const roles = Array.isArray(v.roles) ? v.roles : [];
   const a = v.aide || {};
-  const radio = (id, name, val, on, label) => `<label style="display:block; cursor:pointer;"><input type="radio" name="${name}" id="${id}" value="${val}" ${on ? 'checked' : ''} onchange="onEnrollVolChange()"/> ${label}</label>`;
+  const radio = (id, name, val, on, label) => `<label class="pv-opt" style="font-size:16px;"><input type="radio" name="${name}" id="${id}" value="${val}" ${on ? 'checked' : ''} onchange="onEnrollVolChange()"/> ${label}</label>`;
   return `
-    <div style="font-size:12px; font-weight:700; color:var(--olive); text-transform:uppercase; letter-spacing:0.06em; margin:20px 0 10px;">Volunteering</div>
+    <div style="font-size:17px; font-weight:800; color:var(--olive); margin:20px 0 10px; padding-top:12px; border-top:2px solid var(--olive-mid);">Volunteering</div>
     <div class="form-group">
-      <label class="form-label">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></label>
-      <div style="font-size:13px; color:var(--ink-mid); line-height:1.5; margin:2px 0 4px;">HKN runs entirely on parent volunteers. Families who volunteer help us serve more students each year, and <strong>when space is limited, we give priority to families who volunteer.</strong> Please confirm your answer is still right, since time has passed.</div>
-      <div style="display:flex; gap:20px; margin:6px 0 8px; font-size:14px;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ev-vol" id="ev-vol-yes" value="yes" ${yes ? 'checked' : ''} onchange="onEnrollVolChange()"/> Yes</label>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="radio" name="ev-vol" id="ev-vol-no" value="no" ${no ? 'checked' : ''} onchange="onEnrollVolChange()"/> No</label>
+      <div class="pv-q">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></div>
+      <div class="pv-callout">HKN runs entirely on parent volunteers. Families who volunteer help us serve more students each year, and <strong>when space is limited, we give priority to families who volunteer.</strong></div>
+      <div style="font-size:15px; color:var(--ink); margin:-4px 0 6px;">Please confirm your answer is still right, since time has passed.</div>
+      <div class="pv-yn">
+        <label class="pv-opt"><input type="radio" name="ev-vol" id="ev-vol-yes" value="yes" ${yes ? 'checked' : ''} onchange="onEnrollVolChange()"/> Yes</label>
+        <label class="pv-opt"><input type="radio" name="ev-vol" id="ev-vol-no" value="no" ${no ? 'checked' : ''} onchange="onEnrollVolChange()"/> No</label>
       </div>
-      <div id="ev-vol-roles" style="display:${yes ? 'block' : 'none'}; margin:0 0 8px 2px; font-size:14px; line-height:2;">
-        <div style="font-size:12px; color:var(--ink-light);">Select any that apply:</div>
-        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-aide" ${roles.includes('aide') ? 'checked' : ''} onchange="onEnrollVolChange()"/> I'd like to be a teaching assistant for the full year</label>
-        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-greeting" ${roles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
-        <label style="display:block; cursor:pointer;"><input type="checkbox" id="ev-vol-events" ${roles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
+      <div id="ev-vol-roles" style="display:${yes ? 'block' : 'none'}; margin:0 0 8px 2px;">
+        <div class="pv-hint">Select any that apply:</div>
+        <label class="pv-opt"><input type="checkbox" id="ev-vol-aide" ${roles.includes('aide') ? 'checked' : ''} onchange="onEnrollVolChange()"/> I'd like to be a teaching assistant for the full year</label>
+        <label class="pv-opt"><input type="checkbox" id="ev-vol-greeting" ${roles.includes('greeting') ? 'checked' : ''}/> Greeting students as they arrive and leave</label>
+        <label class="pv-opt"><input type="checkbox" id="ev-vol-events" ${roles.includes('events') ? 'checked' : ''}/> Helping with special events (Diwali, annual celebration, etc.)</label>
       </div>
-      <div id="ev-aide-box" style="display:${yes && roles.includes('aide') ? 'block' : 'none'}; background:var(--cream-mid); border-radius:var(--radius-md); padding:14px 16px; margin:0 0 8px; font-size:13px; color:var(--ink-mid); line-height:1.55;">
-        <div style="font-weight:700; color:var(--ink); margin-bottom:4px;">Help in the classroom, and learn to teach</div>
+      <div id="ev-aide-box" style="display:${yes && roles.includes('aide') ? 'block' : 'none'}; background:var(--cream-mid); border-radius:var(--radius-md); padding:14px 16px; margin:0 0 8px; font-size:15px; color:var(--ink); line-height:1.55;">
+        <div style="font-size:17px; font-weight:800; color:var(--ink); margin-bottom:4px;">Help in the classroom, and learn to teach</div>
         Many of our teachers began as parent assistants. As a teaching assistant you work beside an experienced teacher for the whole year (Fall, Winter and Spring), see how a class is planned and run, and take on more as you grow. We place assistants in a different classroom from their own child, at a time within 30 minutes of the child's class.
-        <div style="font-size:13px; font-weight:600; color:var(--ink); margin:10px 0 2px;">Which works for you? <span style="color:var(--danger);">*</span></div>
+        <div style="font-size:16px; font-weight:800; color:var(--ink); margin:12px 0 2px;">Which works for you? <span style="color:var(--danger);">*</span></div>
         ${radio('ev-aide-earlier', 'ev-aide-timing', 'earlier', a.timing === 'earlier', 'Up to 30 minutes <strong>earlier</strong> than my child\'s class')}
         ${radio('ev-aide-later', 'ev-aide-timing', 'later', a.timing === 'later', 'Up to 30 minutes <strong>later</strong> than my child\'s class')}
         ${radio('ev-aide-either', 'ev-aide-timing', 'either', a.timing === 'either', '<strong>Either</strong> works for me')}
-        <div style="font-size:12px; color:var(--ink-light); margin:8px 0 3px;">Optional: tell us what draws you to this.</div>
+        <div style="font-size:14px; color:var(--ink-mid); margin:8px 0 3px;">Optional: tell us what draws you to this.</div>
         <textarea class="form-textarea" id="ev-aide-note" rows="2" maxlength="500">${escHtml(a.note || '')}</textarea>
-        <div style="font-size:12px; color:var(--ink-light); margin-top:6px;">If your availability has changed, simply leave the teaching assistant box unticked. You can still help in another way.</div>
+        <div style="font-size:14px; color:var(--ink-mid); margin-top:6px;">If your availability has changed, simply leave the teaching assistant box unticked. You can still help in another way.</div>
       </div>
     </div>`;
 }
