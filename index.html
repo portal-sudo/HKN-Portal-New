@@ -318,7 +318,7 @@ tbody tr { transition: background var(--transition); }
 .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .filter-bar .form-input { max-width: 220px; }
 /* Parent forms: prominent questions (volunteering etc.) */
-.pv-q { font-size:16px; font-weight:700; color:var(--ink); line-height:1.35; margin-bottom:8px; }
+.pv-q { font-family:var(--serif); font-size:22px; font-weight:600; color:var(--ink); line-height:1.3; margin-bottom:8px; }
 .pv-callout { background:var(--warning-light); border-left:5px solid var(--orange); border-radius:var(--radius-md); padding:12px 14px; font-size:14px; line-height:1.55; color:var(--ink); margin:6px 0 12px; }
 .pv-callout strong { color:var(--orange-dark); }
 .pv-callout-green { background:var(--success-light); border-left-color:var(--success); }
@@ -1636,7 +1636,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-19.2';
+const APP_VERSION = 'v2026-11-19.3';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10138,7 +10138,7 @@ function _hindiQuestionsHtml(hb) {
   const star  = '<span style="color:var(--danger);">*</span>';
   const checks = (grp, list, picked) => list.map(([v, label]) =>
     `<label class="pv-opt"><input type="checkbox" id="hb-${grp}-${v}" value="${v}" ${picked.includes(v) ? 'checked' : ''} onchange="onHindiChange('${grp}','${v}')"/> ${label}</label>`
-    + (v === 'other' ? `<input type="text" class="form-input" id="hb-${grp}-otherText" maxlength="100" value="${escHtml(grp === 'lang' ? (hb.adultOther || '') : (hb.exposureOther || ''))}" style="display:${picked.includes('other') ? 'block' : 'none'}; margin:0 0 8px 30px;"/>` : '')
+    + (v === 'other' ? `<input type="text" class="form-input" id="hb-${grp}-otherText" maxlength="100" placeholder="${grp === 'lang' ? 'e.g. Gujarati, Telugu, Marathi, Bengali, …' : 'e.g. Hindi-speaking neighbors, summer camp, …'}" value="${escHtml(grp === 'lang' ? (hb.adultOther || '') : (hb.exposureOther || ''))}" style="display:${picked.includes('other') ? 'block' : 'none'}; margin:0 0 8px 30px;"/>` : '')
   ).join('');
   const radios = (name, list, cur) => list.map(([v, label]) =>
     `<label class="pv-opt"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}/> ${label}</label>`).join('');
