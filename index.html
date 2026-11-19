@@ -321,6 +321,7 @@ tbody tr { transition: background var(--transition); }
 .pv-q { font-size:16px; font-weight:700; color:var(--ink); line-height:1.35; margin-bottom:8px; }
 .pv-callout { background:var(--warning-light); border-left:5px solid var(--orange); border-radius:var(--radius-md); padding:12px 14px; font-size:16px; line-height:1.55; color:var(--ink); margin:6px 0 12px; }
 .pv-callout strong { color:var(--orange-dark); }
+.pv-callout-green { background:var(--success-light); border-left-color:var(--success); }
 .pv-yn { display:flex; gap:28px; margin:8px 0; }
 .pv-opt { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; color:var(--ink); margin:8px 0; cursor:pointer; line-height:1.4; }
 .pv-opt input { width:20px; height:20px; accent-color:var(--orange); flex-shrink:0; }
@@ -1633,7 +1634,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-18.3';
+const APP_VERSION = 'v2026-11-18.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10228,7 +10229,7 @@ function renderIntakeBioForm(student, isInterest) {
       </div>
       <div class="form-group">
         <div class="pv-q">${isEdit ? "What's new about the language at home or your child's Hindi learning?" : "Language at home and your child's Hindi background"} <span style="color:var(--danger);">*</span></div>
-        <div style="font-size:14px; color:var(--ink-mid); line-height:1.55; margin:2px 0 8px;">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
+        <div class="pv-callout pv-callout-green">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
         <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. We mostly speak Gujarati at home, with some English. Our child understands a little Hindi from grandparents and took a weekend Hindi class for a year. My child is not familiar with the Hindi script and characters…"></textarea>
         <div style="font-size:13px; color:var(--ink-mid); margin-top:6px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — this helps us understand your child's level before placement."}</div>
       </div>
