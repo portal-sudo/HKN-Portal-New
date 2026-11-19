@@ -131,6 +131,7 @@ create table if not exists students (
   last_parent_access      timestamptz,
   photo_path              text,
   volunteering            jsonb,
+  hindi_background        jsonb,
   reenroll_intent         jsonb,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
@@ -250,6 +251,7 @@ create table if not exists book_teacher_copies (
 alter table admins   add column if not exists last_login timestamptz;
 alter table students add column if not exists photo_path text;
 alter table students add column if not exists volunteering jsonb;
+alter table students add column if not exists hindi_background jsonb;
 alter table teachers add column if not exists last_login timestamptz;
 alter table settings add column if not exists interest_confirmation_message text;
 alter table students add column if not exists reenroll_intent jsonb;
@@ -449,9 +451,49 @@ declare
   v_recon   text;
   v_open    text;
   v_now     timestamptz := now();
+  v_willing boolean;
+  v_roles   jsonb;
+  v_clean   jsonb;
+  v_hbraw   jsonb := nullif(s->'hindiBackground', 'null'::jsonb);
+  v_hb      jsonb;
+  v_langs   jsonb;
+  v_expo    jsonb;
 begin
   if v_id is null or length(v_id) > 60 then
     raise exception 'invalid id';
+  end if;
+
+  -- Hindi background: store only a cleaned copy (allowed values, capped text). Level and script are required.
+  if v_hbraw is not null then
+    if jsonb_typeof(v_hbraw) <> 'object'
+       or coalesce(v_hbraw->>'hindiLevel','') not in ('none','words','simple','basic','conversation')
+       or coalesce(v_hbraw->>'script','')     not in ('none','letters','words','fluent') then
+      raise exception 'invalid hindi background';
+    end if;
+    if jsonb_typeof(v_hbraw->'adultLanguages') = 'array' then
+      select coalesce(jsonb_agg(r order by r), '[]'::jsonb) into v_langs
+      from (select distinct r from jsonb_array_elements_text(v_hbraw->'adultLanguages') r
+            where r in ('hindi','english','otherIndian','other')) q;
+    else
+      v_langs := '[]'::jsonb;
+    end if;
+    if jsonb_typeof(v_hbraw->'exposure') = 'array' then
+      select coalesce(jsonb_agg(r order by r), '[]'::jsonb) into v_expo
+      from (select distinct r from jsonb_array_elements_text(v_hbraw->'exposure') r
+            where r in ('class','relatives','india','media','none','other')) q;
+      if v_expo ? 'none' then v_expo := '["none"]'::jsonb; end if;
+    else
+      v_expo := '[]'::jsonb;
+    end if;
+    v_hb := jsonb_build_object(
+      'adultLanguages', v_langs,
+      'adultOther',     case when v_langs ? 'other' then left(coalesce(v_hbraw->>'adultOther',''),100) else '' end,
+      'hindiLevel',     v_hbraw->>'hindiLevel',
+      'script',         v_hbraw->>'script',
+      'exposure',       v_expo,
+      'exposureOther',  case when v_expo ? 'other' then left(coalesce(v_hbraw->>'exposureOther',''),100) else '' end,
+      'goal',           left(coalesce(v_hbraw->>'goal',''),300),
+      'date',           now());
   end if;
 
   select * into cur from students where id = v_id;
@@ -476,7 +518,7 @@ begin
       alt_contact_first_name, alt_contact_last_name, alt_contact_email, alt_contact_phone,
       speaking_score, reading_score, writing_score, intake_assessed,
       notes, "timestamp", session_data, status_history,
-      volunteering, last_parent_access, updated_at
+      volunteering, hindi_background, last_parent_access, updated_at
     ) values (
       v_id, 'Interest',
       left(s->>'firstName',100), left(s->>'lastName',100),
@@ -487,7 +529,7 @@ begin
       left(s->>'altContactEmail',200), left(s->>'altContactPhone',40),
       0, 0, 0, false,
       v_notes, v_now, '[]'::jsonb, '[]'::jsonb,
-      v_vol, v_now, v_now
+      v_vol, v_hb, v_now, v_now
     );
     return json_build_object('saved', true, 'id', v_id);
   end if;
@@ -522,6 +564,7 @@ begin
       dob               = coalesce(nullif(s->>'dob','')::date, cur.dob),
       grade             = left(coalesce(s->>'grade', cur.grade),20),
       volunteering      = coalesce(v_vol, cur.volunteering),
+      hindi_background  = coalesce(v_hb, cur.hindi_background),
       notes             = case when starts_with(v_notes, coalesce(cur.notes,'')) then v_notes else cur.notes end
     where id = v_id;
 
@@ -570,6 +613,32 @@ begin
         volunteering = coalesce(v_vol, cur.volunteering)
       where id = v_id;
     end if;
+  end if;
+
+  -- Invited / In-Process families: volunteering answer from the enrollment form.
+  -- Only a cleaned copy is stored: willing (boolean), roles (aide/greeting/events only),
+  -- and, when 'aide' is chosen, a required timing (earlier/later/either) plus an optional short note.
+  if cur.status in ('Invited','In-Process') and v_vol is not null
+     and jsonb_typeof(v_vol->'willing') = 'boolean' then
+    v_willing := (v_vol->>'willing')::boolean;
+    if v_willing and jsonb_typeof(v_vol->'roles') = 'array' then
+      select coalesce(jsonb_agg(r order by r), '[]'::jsonb) into v_roles
+      from (select distinct r from jsonb_array_elements_text(v_vol->'roles') r
+            where r in ('aide','greeting','events')) q;
+    else
+      v_roles := '[]'::jsonb;
+    end if;
+    v_clean := jsonb_build_object('willing', v_willing, 'roles', v_roles);
+    if v_roles ? 'aide' then
+      if coalesce(v_vol->'aide'->>'timing','') not in ('earlier','later','either') then
+        raise exception 'aide timing required';
+      end if;
+      v_clean := v_clean || jsonb_build_object('aide', jsonb_build_object(
+        'timing', v_vol->'aide'->>'timing',
+        'note',   left(coalesce(v_vol->'aide'->>'note',''), 500),
+        'date',   v_now));
+    end if;
+    update students set volunteering = v_clean where id = v_id;
   end if;
 
   return json_build_object('saved', true, 'id', v_id);
