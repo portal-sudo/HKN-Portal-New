@@ -1634,7 +1634,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-18.5';
+const APP_VERSION = 'v2026-11-19.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -9667,6 +9667,7 @@ async function _intakeLookupCore() {
         sessionData:          found.session_data   || [],
         statusHistory:        found.status_history || [],
         volunteering:         found.volunteering || null,
+        hindiBackground:      found.hindi_background || null,
         reenrollIntent:       found.reenroll_intent || null,
       };
 
@@ -10122,6 +10123,72 @@ function renderIntakeInProcess(student, openSess) {
   `;
 }
 
+// ── Hindi background questions (interest form) ───────────────
+const _HB_LANGS  = [['hindi','Hindi'],['english','English'],['otherIndian','Other Indian language(s)'],['other','Other:']];
+const _HB_LEVELS = [['none','Does not understand or speak Hindi yet'],['words','Understands a few Hindi words'],['simple','Understands simple Hindi sentences but speaks very little'],['basic','Understands and speaks basic Hindi'],['conversation','Can comfortably have a conversation in Hindi']];
+const _HB_SCRIPT = [['none','Does not know the Hindi script yet'],['letters','Knows some Hindi letters'],['words','Can read simple Hindi words'],['fluent','Reads and writes Hindi comfortably']];
+const _HB_EXPO   = [['class','Hindi class or other school'],['relatives','Grandparents or relatives'],['india','Time spent in India'],['media','Hindi movies, songs, or books'],['none','No previous exposure'],['other','Other:']];
+
+function _hindiQuestionsHtml(hb) {
+  hb = hb || {};
+  const langs = Array.isArray(hb.adultLanguages) ? hb.adultLanguages : [];
+  const expo  = Array.isArray(hb.exposure) ? hb.exposure : [];
+  const star  = '<span style="color:var(--danger);">*</span>';
+  const checks = (grp, list, picked) => list.map(([v, label]) =>
+    `<label class="pv-opt"><input type="checkbox" id="hb-${grp}-${v}" value="${v}" ${picked.includes(v) ? 'checked' : ''} onchange="onHindiChange('${grp}','${v}')"/> ${label}</label>`
+    + (v === 'other' ? `<input type="text" class="form-input" id="hb-${grp}-otherText" maxlength="100" value="${escHtml(grp === 'lang' ? (hb.adultOther || '') : (hb.exposureOther || ''))}" style="display:${picked.includes('other') ? 'block' : 'none'}; margin:0 0 8px 30px;"/>` : '')
+  ).join('');
+  const radios = (name, list, cur) => list.map(([v, label]) =>
+    `<label class="pv-opt"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}/> ${label}</label>`).join('');
+  return `
+      <div class="pv-callout pv-callout-green">These questions about your child's Hindi background help us place your child in the right class. Please tick what fits best.</div>
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">What language(s) do the adults in your home mainly speak? ${star}</div>
+        ${checks('lang', _HB_LANGS, langs)}
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">How much Hindi does your child currently understand or speak? ${star}</div>
+        ${radios('hb-level', _HB_LEVELS, hb.hindiLevel)}
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">Can your child recognize or read Hindi letters and words? ${star}</div>
+        ${radios('hb-script', _HB_SCRIPT, hb.script)}
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">Has your child learned or been exposed to Hindi outside the home? ${star}</div>
+        <div class="pv-hint">Select all that apply:</div>
+        ${checks('expo', _HB_EXPO, expo)}
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">What is your main goal for your child in learning Hindi? <span style="font-weight:400; color:var(--ink-mid);">(optional)</span></div>
+        <input type="text" class="form-input" id="hb-goal" maxlength="300" style="max-width:none;" value="${escHtml(hb.goal || '')}"/>
+      </div>`;
+}
+
+// "No previous exposure" and the other exposure choices exclude each other; show the "Other:" text boxes only when ticked
+function onHindiChange(grp, val) {
+  if (grp === 'expo') {
+    const none = document.getElementById('hb-expo-none');
+    const others = ['class','relatives','india','media','other'].map(v => document.getElementById('hb-expo-' + v)).filter(Boolean);
+    if (val === 'none') { if (none && none.checked) others.forEach(c => { c.checked = false; }); }
+    else if (none) none.checked = false;
+  }
+  const o = document.getElementById('hb-' + grp + '-other'), tb = document.getElementById('hb-' + grp + '-otherText');
+  if (o && tb) tb.style.display = o.checked ? 'block' : 'none';
+}
+
+function _readHindiBackground() {
+  const chk = (grp, list) => list.map(x => x[0]).filter(v => document.getElementById('hb-' + grp + '-' + v)?.checked);
+  const rad = n => document.querySelector('input[name="' + n + '"]:checked')?.value || '';
+  const txt = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    adultLanguages: chk('lang', _HB_LANGS), adultOther: txt('hb-lang-otherText'),
+    hindiLevel: rad('hb-level'), script: rad('hb-script'),
+    exposure: chk('expo', _HB_EXPO), exposureOther: txt('hb-expo-otherText'),
+    goal: txt('hb-goal'),
+  };
+}
+
 function renderIntakeBioForm(student, isInterest) {
   const s = student || {};
   const nameParts = (intakeState.parentName||'').split(' ');
@@ -10227,11 +10294,10 @@ function renderIntakeBioForm(student, isInterest) {
           <input type="email" class="form-input" id="ib-altEmail" value="${escHtml(s.altContactEmail||'')}"/>
         </div>
       </div>
-      <div class="form-group">
-        <div class="pv-q">${isEdit ? "What's new about the language at home or your child's Hindi learning?" : "Language at home and your child's Hindi background"} <span style="color:var(--danger);">*</span></div>
-        <div class="pv-callout pv-callout-green">Which language do the adults in your home mainly speak, so we know what your child hears day to day? Please also tell us about any Hindi your child has learned elsewhere, such as another class, school, grandparents or time in India.</div>
-        <textarea class="form-textarea" id="ib-notes" rows="4" placeholder="e.g. We mostly speak Gujarati at home, with some English. Our child understands a little Hindi from grandparents and took a weekend Hindi class for a year. My child is not familiar with the Hindi script and characters…"></textarea>
-        <div style="font-size:13px; color:var(--ink-mid); margin-top:6px;">${isEdit ? 'Required — please add anything new, or confirm where things stand.' : "Required — this helps us understand your child's level before placement."}</div>
+      ${_hindiQuestionsHtml(s.hindiBackground)}
+      <div class="form-group" style="margin-top:14px;">
+        <div class="pv-q">${isEdit ? 'Anything new to add?' : 'Anything else we should know?'} <span style="font-weight:400; color:var(--ink-mid);">(optional)</span></div>
+        <textarea class="form-textarea" id="ib-notes" rows="3"></textarea>
       </div>
       <div class="form-group" style="margin-top:16px;">
         <div class="pv-q">Would you be willing to volunteer if your child is enrolled? <span style="color:var(--danger);">*</span></div>
@@ -10376,7 +10442,6 @@ async function intakeSaveBio() {
       { id: 'ib-grade',         label: 'Grade' },
       { id: 'ib-address',       label: 'Home address' },
       { id: 'ib-phone',         label: 'Phone number' },
-      { id: 'ib-notes',         label: 'Language at home and Hindi background' },
     ];
     for (const f of required) {
       if (!(document.getElementById(f.id)?.value || '').trim()) {
@@ -10394,13 +10459,15 @@ async function intakeSaveBio() {
       document.getElementById('ib-address')?.focus();
       return;
     }
-    // Notes must have meaningful content (at least 20 chars)
-    const notes = (document.getElementById('ib-notes').value || '').trim();
-    if (notes.length < 20) {
-      showToast('Please tell us a little more about the language at home and your child\'s Hindi background', 'error');
-      document.getElementById('ib-notes')?.focus();
-      return;
-    }
+    // Hindi background: language, level, script and exposure are all required
+    const hb = _readHindiBackground();
+    const _hbFail = (msg, id) => { showToast(msg, 'error'); document.getElementById(id)?.focus(); };
+    if (!hb.adultLanguages.length) { _hbFail('Please tell us which language(s) the adults in your home mainly speak', 'hb-lang-hindi'); return; }
+    if (hb.adultLanguages.includes('other') && !hb.adultOther) { _hbFail('Please type the other language(s) spoken at home', 'hb-lang-otherText'); return; }
+    if (!hb.hindiLevel) { showToast('Please tell us how much Hindi your child understands or speaks', 'error'); document.querySelector('input[name="hb-level"]')?.focus(); return; }
+    if (!hb.script) { showToast('Please tell us whether your child can recognize or read Hindi letters', 'error'); document.querySelector('input[name="hb-script"]')?.focus(); return; }
+    if (!hb.exposure.length) { _hbFail('Please tell us about your child\'s exposure to Hindi outside the home (or choose "No previous exposure")', 'hb-expo-class'); return; }
+    if (hb.exposure.includes('other') && !hb.exposureOther) { _hbFail('Please type the other way your child has been exposed to Hindi', 'hb-expo-otherText'); return; }
     // Volunteering: Yes/No required; if Yes, at least one role
     const volYes = document.getElementById('ib-vol-yes')?.checked;
     const volNo  = document.getElementById('ib-vol-no')?.checked;
@@ -10515,8 +10582,11 @@ async function intakeSaveBio() {
         // Existing Interest record: keep status, studentId, scores and assessed flag as on file;
         // append the parent's new note (existing notes are never shown to or overwritten by the parent)
         const _d    = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const _line = `Parent update (${_d}): ${(document.getElementById('ib-notes')?.value || '').trim()}`;
-        updated.notes = s.notes ? `${s.notes}\n\n${_line}` : _line;
+        const _extra = (document.getElementById('ib-notes')?.value || '').trim();
+        if (_extra) {
+          const _line = `Parent update (${_d}): ${_extra}`;
+          updated.notes = s.notes ? `${s.notes}\n\n${_line}` : _line;
+        }
       } else {
         updated.status           = 'Interest';
         updated.studentId        = '';
@@ -10525,8 +10595,9 @@ async function intakeSaveBio() {
         updated.writingScore     = 0;
         updated.intakeAssessed   = false;
         updated.intakeAssessedDate = '';
-        updated.notes            = document.getElementById('ib-notes')?.value || '';
+        updated.notes            = (document.getElementById('ib-notes')?.value || '').trim();
       }
+      updated.hindiBackground = _readHindiBackground();
       const _volWilling = !!document.getElementById('ib-vol-yes')?.checked;
       updated.volunteering     = {
         willing: _volWilling,
