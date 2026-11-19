@@ -325,6 +325,8 @@ tbody tr { transition: background var(--transition); }
 .pv-yn { display:flex; gap:28px; margin:8px 0; }
 .pv-opt { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; color:var(--ink); margin:8px 0; cursor:pointer; line-height:1.4; }
 .pv-opt input { width:20px; height:20px; accent-color:var(--orange); flex-shrink:0; }
+.pv-choices { margin:6px 0 0 4px; padding-left:14px; border-left:3px solid var(--olive-mid); }
+.pv-choices .pv-opt { font-weight:400; }
 .pv-hint { font-size:14px; font-weight:700; color:var(--ink); line-height:1.5; margin-top:6px; }
 
 .filter-bar .form-select { max-width: 160px; }
@@ -1634,7 +1636,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-19.1';
+const APP_VERSION = 'v2026-11-19.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -10124,7 +10126,7 @@ function renderIntakeInProcess(student, openSess) {
 }
 
 // ── Hindi background questions (interest form) ───────────────
-const _HB_LANGS  = [['hindi','Hindi'],['english','English'],['otherIndian','Other Indian language(s)'],['other','Other:']];
+const _HB_LANGS  = [['hindi','Hindi'],['english','English'],['other','Other:']];
 const _HB_LEVELS = [['none','Does not understand or speak Hindi yet'],['words','Understands a few Hindi words'],['simple','Understands simple Hindi sentences but speaks very little'],['basic','Understands and speaks basic Hindi'],['conversation','Can comfortably have a conversation in Hindi']];
 const _HB_SCRIPT = [['none','Does not know the Hindi script yet'],['letters','Knows some Hindi letters'],['words','Can read simple Hindi words'],['fluent','Reads and writes Hindi comfortably']];
 const _HB_EXPO   = [['class','Hindi class or other school'],['relatives','Grandparents or relatives'],['india','Time spent in India'],['media','Hindi movies, songs, or books'],['none','No previous exposure'],['other','Other:']];
@@ -10142,24 +10144,24 @@ function _hindiQuestionsHtml(hb) {
     `<label class="pv-opt"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}/> ${label}</label>`).join('');
   return `
       <div class="pv-callout pv-callout-green">These questions about your child's Hindi background help us place your child in the right class. Please tick what fits best.</div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:22px;">
         <div class="pv-q">What language(s) do the adults in your home mainly speak? ${star}</div>
-        ${checks('lang', _HB_LANGS, langs)}
+        <div class="pv-choices">${checks('lang', _HB_LANGS, langs)}</div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:22px;">
         <div class="pv-q">How much Hindi does your child currently understand or speak? ${star}</div>
-        ${radios('hb-level', _HB_LEVELS, hb.hindiLevel)}
+        <div class="pv-choices">${radios('hb-level', _HB_LEVELS, hb.hindiLevel)}</div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:22px;">
         <div class="pv-q">Can your child recognize or read Hindi letters and words? ${star}</div>
-        ${radios('hb-script', _HB_SCRIPT, hb.script)}
+        <div class="pv-choices">${radios('hb-script', _HB_SCRIPT, hb.script)}</div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:22px;">
         <div class="pv-q">Has your child learned or been exposed to Hindi outside the home? ${star}</div>
         <div class="pv-hint">Select all that apply:</div>
-        ${checks('expo', _HB_EXPO, expo)}
+        <div class="pv-choices">${checks('expo', _HB_EXPO, expo)}</div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:22px;">
         <div class="pv-q">What is your main goal for your child in learning Hindi? <span style="font-weight:400; color:var(--ink-mid);">(optional)</span></div>
         <input type="text" class="form-input" id="hb-goal" maxlength="300" style="max-width:none;" value="${escHtml(hb.goal || '')}"/>
       </div>`;
