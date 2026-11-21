@@ -321,6 +321,9 @@ tbody tr { transition: background var(--transition); }
 .pv-q { font-family:var(--serif); font-size:20px; font-weight:600; color:var(--ink); line-height:1.3; margin-bottom:8px; }
 .pv-callout { background:var(--warning-light); border-left:5px solid var(--orange); border-radius:var(--radius-md); padding:12px 14px; font-size:14px; line-height:1.55; color:var(--ink); margin:6px 0 12px; }
 .pv-callout strong { color:var(--orange-dark); }
+.pv-top { background:var(--success-light); border-left:5px solid var(--success); border-radius:var(--radius-md); padding:14px 18px; margin-bottom:20px; }
+.pv-top .intake-step-title { margin-bottom:4px; }
+.pv-top .intake-step-subtitle { margin-bottom:0; color:var(--ink-mid); }
 .pv-callout-green { background:var(--success-light); border-left-color:var(--success); }
 .pv-yn { display:flex; gap:28px; margin:8px 0; }
 .pv-opt { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; color:var(--ink); margin:8px 0; cursor:pointer; line-height:1.4; }
@@ -542,8 +545,10 @@ tbody tr { transition: background var(--transition); }
 
     <!-- Step 2: Bio form -->
     <div class="intake-step card" id="intake-step-2">
-      <div class="intake-step-title" id="intake-step2-title">Update Student Information</div>
-      <div class="intake-step-subtitle" id="intake-step2-subtitle">Please verify and complete the information below.</div>
+      <div class="pv-top">
+        <div class="intake-step-title" id="intake-step2-title">Update Student Information</div>
+        <div class="intake-step-subtitle" id="intake-step2-subtitle">Please verify and complete the information below.</div>
+      </div>
       <div id="intake-bio-form"></div>
       <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
         <button class="btn btn-secondary btn-intake-back" id="intake-back-btn" onclick="intakeGoStep(1)">← Back</button>
@@ -1636,7 +1641,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-20.1';
+const APP_VERSION = 'v2026-11-20.2';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
