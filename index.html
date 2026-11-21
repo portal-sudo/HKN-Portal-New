@@ -1641,7 +1641,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-20.3';
+const APP_VERSION = 'v2026-11-20.4';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -3114,6 +3114,15 @@ function renderDirectory() {
         <option value="">All levels</option>
         ${classLevels.map(l => `<option value="${l}" ${currentStudentFilter.classLevel===l?'selected':''}>${l}</option>`).join('')}
       </select>
+      ${dirMode === 'directory' ? `
+      <select class="form-select" id="filter-hlevel" onchange="renderStudentTable()">
+        ${[['', 'Hindi level: any'], ...Object.entries(_HB_SHORT_LEVEL), ['unanswered', 'Hindi level: not answered']]
+          .map(([v, l]) => `<option value="${v}" ${(currentStudentFilter.hLevel || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <select class="form-select" id="filter-hscript" onchange="renderStudentTable()">
+        ${[['', 'Hindi script: any'], ...Object.entries(_HB_SHORT_SCRIPT), ['unanswered', 'Hindi script: not answered']]
+          .map(([v, l]) => `<option value="${v}" ${(currentStudentFilter.hScript || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>` : ''}
       ${dirMode === 'volunteers' ? `
       <select class="form-select" id="filter-vol" onchange="renderStudentTable()">
         ${[['', 'All volunteering answers'], ['willing', 'Willing to help (any)'], ['aide', 'Teaching assistant'], ['greeting', 'Greeting students'], ['events', 'Events & other help'], ['no', 'Not willing'], ['none', 'Not asked yet']]
@@ -3192,13 +3201,16 @@ function renderStudentTable() {
   const teacher = document.getElementById('filter-teacher')?.value || '';
   const classLevel = document.getElementById('filter-level')?.value || '';
   const vol = dirMode === 'volunteers' ? (document.getElementById('filter-vol')?.value || '') : '';
+  const hLevel  = dirMode === 'directory' ? (document.getElementById('filter-hlevel')?.value  || '') : '';
+  const hScript = dirMode === 'directory' ? (document.getElementById('filter-hscript')?.value || '') : '';
 
   // Persist current filter selections so they survive modal open/close re-renders
-  currentStudentFilter = { name, session, status, teacher, classLevel, vol };
+  currentStudentFilter = { name, session, status, teacher, classLevel, vol, hLevel, hScript };
   if (dirMode === 'volunteers') volFilterMemory = { ...currentStudentFilter };
 
   let students = DB.searchStudents({ name, session, status, teacher, classLevel });
   if (vol) students = students.filter(s => volunteeringMatches(s.volunteering, vol));
+  if (hLevel || hScript) students = students.filter(s => hindiMatches(s.hindiBackground, hLevel, hScript));
 
   // Sort
   const activeSessForSort = SessionEngine.getActiveSession();
@@ -3227,6 +3239,10 @@ function renderStudentTable() {
       case 'date':    va = a.timestamp||''; vb = b.timestamp||''; break;
       case 'lastaccess': va = a.lastParentAccess||''; vb = b.lastParentAccess||''; break;   // never-visited ('') sorts first when ascending
       case 'age':     va = a.dob||''; vb = b.dob||''; break;
+      case 'hindi': {
+        const hk = s => { const h = s.hindiBackground; if (!_hbHas(h)) return '9'; return Object.keys(_HB_SHORT_LEVEL).indexOf(h.hindiLevel) + '' + Object.keys(_HB_SHORT_SCRIPT).indexOf(h.script); };
+        va = hk(a); vb = hk(b); break;
+      }
       case 'vol': {
         const vk = s => { const v = s.volunteering; return !v || typeof v.willing !== 'boolean' ? '3' : v.willing ? '1' + (v.roles || []).slice().sort().join(',') : '2'; };
         va = vk(a); vb = vk(b); break;
@@ -3281,7 +3297,7 @@ function renderStudentTable() {
   const thead = document.getElementById('dir-thead-row');
   if (thead) thead.innerHTML =
     th('id','ID') + th('name','Student name') + th('parent','Parent') + th('status','Status') +
-    (dirMode === 'volunteers' ? th('vol', 'Volunteering') : th('age', 'Age — DoB')) +
+    (dirMode === 'volunteers' ? th('vol', 'Volunteering') : th('age', 'Age — DoB') + th('hindi', 'Hindi')) +
     (isDateMode  ? th('date', dateColLabel) : '') +
     (isDateMode  ? th('lastaccess', 'Last portal visit') : '') +
     (showSession ? th('session','Session') : '') +
@@ -3292,7 +3308,7 @@ function renderStudentTable() {
   const tbody = document.getElementById('student-tbody');
   if (!tbody) return;
 
-  const colCount = 5 + 1 + (isDateMode ? 2 : 0) + (showSession ? 1 : 0) + (showTeacher ? 1 : 0) +
+  const colCount = 5 + (dirMode === 'directory' ? 1 : 0) + 1 + (isDateMode ? 2 : 0) + (showSession ? 1 : 0) + (showTeacher ? 1 : 0) +
                    (showLevel ? 1 : 0) + 1;
 
   if (students.length === 0) {
@@ -3338,7 +3354,7 @@ function renderStudentTable() {
         <td style="font-weight:500;">${s.firstName} ${s.lastName}</td>
         <td style="color:var(--ink-light);">${s.parentFirstName} ${s.parentLastName}</td>
         <td><span class="badge badge-${(s.status||'').toLowerCase().replace('-','').replace(' ','')}">${s.status}</span></td>
-        ${dirMode === 'volunteers' ? `<td style="font-size:12px;">${volunteeringShortHtml(s.volunteering)}</td>` : dobCell}${dateCell}${visitCell}${sessionCell}${teacherCell}${levelCell}
+        ${dirMode === 'volunteers' ? `<td style="font-size:12px;">${volunteeringShortHtml(s.volunteering)}</td>` : dobCell + `<td style="font-size:12px;">${hindiShortHtml(s.hindiBackground)}</td>`}${dateCell}${visitCell}${sessionCell}${teacherCell}${levelCell}
         <td onclick="event.stopPropagation();"></td>
       </tr>
     `;
@@ -3364,6 +3380,44 @@ function scoreBar(val) {
     dots += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 1px;background:${i<=filled?'var(--orange)':'var(--olive-mid)'};"></span>`;
   }
   return `<span style="display:inline-flex; align-items:center;">${dots}</span>`;
+}
+
+// ── Hindi background (students.hindi_background jsonb), read-only displays + filter ──
+const _HB_SHORT_LEVEL  = { none: 'None yet', words: 'A few words', simple: 'Simple sentences', basic: 'Basic', conversation: 'Conversational' };
+const _HB_SHORT_SCRIPT = { none: 'No script', letters: 'Letters', words: 'Reads words', fluent: 'Reads & writes' };
+const _hbLabel = (list, key) => (list.find(x => x[0] === key) || [key, key])[1];
+const _hbHas = hb => !!hb && typeof hb === 'object' && !!hb.hindiLevel;
+
+// Student modal: full answers
+function hindiBackgroundHtml(hb) {
+  if (!_hbHas(hb)) return '<span style="color:var(--ink-light);">Not answered yet</span>';
+  const row = (k, v) => v ? `<div style="margin-top:3px;"><span style="color:var(--ink-light);">${k}:</span> ${v}</div>` : '';
+  const langs = (Array.isArray(hb.adultLanguages) ? hb.adultLanguages : []).map(l => l === 'other' && hb.adultOther ? 'Other (' + escHtml(hb.adultOther) + ')' : escHtml(_hbLabel(_HB_LANGS, l).replace(/:$/, '')));
+  const expo  = (Array.isArray(hb.exposure) ? hb.exposure : []).map(l => l === 'other' && hb.exposureOther ? 'Other (' + escHtml(hb.exposureOther) + ')' : escHtml(_hbLabel(_HB_EXPO, l).replace(/:$/, '')));
+  return row('Adults speak', langs.join(', ')).replace('margin-top:3px;', '') +
+    row('Hindi level', escHtml(_hbLabel(_HB_LEVELS, hb.hindiLevel))) +
+    row('Hindi script', escHtml(_hbLabel(_HB_SCRIPT, hb.script))) +
+    row('Outside the home', expo.join(', ')) +
+    row('Goal', hb.goal ? escHtml(hb.goal) : '');
+}
+
+// Directory column: "Basic · Letters", or "—" if not answered
+function hindiShortHtml(hb) {
+  if (!_hbHas(hb)) return '<span style="color:var(--ink-light);">—</span>';
+  return escHtml(_HB_SHORT_LEVEL[hb.hindiLevel] || hb.hindiLevel) + ' · ' + escHtml(_HB_SHORT_SCRIPT[hb.script] || hb.script || '—');
+}
+
+// Directory filters: '' = any, 'unanswered', or a level / script key
+function hindiMatches(hb, lv, sc) {
+  const has = _hbHas(hb);
+  if (lv === 'unanswered' || sc === 'unanswered') {
+    if (lv === 'unanswered' && sc && sc !== 'unanswered') return false;
+    if (sc === 'unanswered' && lv && lv !== 'unanswered') return false;
+    return !has;
+  }
+  if (lv && !(has && hb.hindiLevel === lv)) return false;
+  if (sc && !(has && hb.script === sc)) return false;
+  return true;
 }
 
 // Read-only text for a student's volunteering answer (students.volunteering jsonb)
@@ -3781,6 +3835,12 @@ function openStudentModal(studentId) {
           <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Volunteering</div>
           <div style="padding:9px 12px; background:var(--olive-pale); border:1px solid var(--olive-mid); border-radius:var(--radius-md); color:var(--ink-mid); font-size:14px;">
             ${volunteeringSummaryHtml(s.volunteering)}
+          </div>
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px; font-weight:700; color:var(--olive-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Hindi background</div>
+          <div style="padding:9px 12px; background:var(--olive-pale); border:1px solid var(--olive-mid); border-radius:var(--radius-md); color:var(--ink-mid); font-size:14px;">
+            ${hindiBackgroundHtml(s.hindiBackground)}
           </div>
         </div>
         ${s.reenrollIntent && typeof s.reenrollIntent.continuing === 'boolean' ? `
@@ -6883,6 +6943,7 @@ const SupabaseSync = {
         lastParentAccess:     row.last_parent_access || null,
         photoPath:            row.photo_path || null,
         volunteering:         row.volunteering || null,
+        hindiBackground:      row.hindi_background || null,
         reenrollIntent:       row.reenroll_intent || null,
       }));
 
@@ -7226,6 +7287,7 @@ const SupabaseSync = {
       last_parent_access:     s.lastParentAccess      || null,
       photo_path:             s.photoPath             || null,
       volunteering:           s.volunteering          || null,
+      hindi_background:       s.hindiBackground       || null,
       reenroll_intent:        s.reenrollIntent        || null,
       updated_at:             new Date().toISOString(),
     };
