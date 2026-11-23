@@ -1128,3 +1128,53 @@ to service_role;
 -- select count(*) from book_inventory; -- expect 10
 -- select table_name from information_schema.tables where table_schema='public' order by table_name; -- expect 12 tables
 -- select routine_name from information_schema.routines where routine_schema='public' order by routine_name; -- expect 8 functions
+
+-- ---------------------------------------------------------------------
+-- save_class_note: lets a teacher (or admin) save ONE class's Class Note / Homework Note.
+-- Teachers cannot write the sessions table directly (sessions_admin_write), so this is how their notes persist.
+-- Added Nov 2026 (save_class_note.sql).
+-- ---------------------------------------------------------------------
+create or replace function save_class_note(p_session text, p_key text, p_text text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_ok boolean;
+begin
+  if coalesce(auth.jwt() ->> 'email', '') = '' then
+    raise exception 'not signed in';
+  end if;
+  if p_session is null or p_key is null or position('|' in p_key) = 0 then
+    raise exception 'invalid class';
+  end if;
+  if length(coalesce(p_text, '')) > 20000 then
+    raise exception 'note too long';
+  end if;
+
+  if not is_admin() then
+    select exists (
+      select 1 from teachers t
+      where lower(t.email) = lower(auth.jwt() ->> 'email')
+        and t.role = 'teacher'
+        and btrim(split_part(coalesce(t.first_name, ''), ' ', 1)) <> ''
+        and position(lower(btrim(split_part(t.first_name, ' ', 1))) in lower(split_part(p_key, '|', 1))) > 0
+    ) into v_ok;
+    if not v_ok then
+      raise exception 'not allowed';
+    end if;
+  end if;
+
+  update sessions
+     set class_notes = jsonb_set(coalesce(class_notes, '{}'::jsonb), array[p_key], to_jsonb(coalesce(p_text, '')), true)
+   where id = p_session;
+  if not found then
+    raise exception 'session not found';
+  end if;
+end;
+$function$;
+
+revoke all on function save_class_note(text, text, text) from public;
+revoke all on function save_class_note(text, text, text) from anon;
+grant execute on function save_class_note(text, text, text) to authenticated;
