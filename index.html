@@ -1651,7 +1651,7 @@ function seedStudentsIfEmpty() {
 // in the top nav bar and checkable via console (APP_VERSION), so
 // it's always possible to tell which version a saved file or a
 // deployed site is actually running. Format: v<date>.<n>
-const APP_VERSION = 'v2026-11-22.2';
+const APP_VERSION = 'v2026-11-23.1';
 
 // ── STATE ────────────────────────────────────────────────────
 // Device detection — set once at boot, used for mobile-specific behavior
@@ -4826,6 +4826,7 @@ function renderClassCards() {
   // Gather all students in this session, applying teacher/level filters
   const allStudents = DB.getStudents();
   const sessStudents = allStudents.filter(s => {
+    if (s.status === 'Dropped') return false;  // dropped students are not on class rosters
     const sd = (s.sessionData || []).find(d => d.session === sessName);
     if (!sd) return false;
     if (teacherFilter && sd.teacher !== teacherFilter) return false;
@@ -5033,6 +5034,7 @@ function saveHomeworkNoteToClass(sessName, teacher, classTime) {
 
   // Same class-membership logic as renderClassCards
   const classStudents = DB.getStudents().filter(s => {
+    if (s.status === 'Dropped') return false;
     const sd = (s.sessionData || []).find(d => d.session === sessName);
     return sd && sd.teacher === teacher && sd.classTime === classTime;
   });
